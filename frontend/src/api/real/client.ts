@@ -63,7 +63,9 @@ type BackendTeamPolicyAgentResponse = {
 
 type BackendAIChatResponse = {
   answer: string;
-  scope: "TEAM" | "GLOBAL";
+  scope: string;
+  tool_results_used?: string[];
+  conversation_id?: string | null;
 };
 
 type BackendAIChatHistoryResponse = {
@@ -71,7 +73,10 @@ type BackendAIChatHistoryResponse = {
     id: number;
     question: string;
     answer: string;
-    scope: "TEAM" | "GLOBAL";
+    scope: string;
+    role?: string | null;
+    tools_used?: string | null;
+    latency_ms?: number | null;
     created_at: string;
   }>;
 };
@@ -219,16 +224,34 @@ function mapBalance(balance: BackendBalance): VacationBalance {
   };
 }
 
+const ERROR_MESSAGES: Record<number, string> = {
+  400: "Solicitud inválida. Verifica los datos ingresados.",
+  403: "No tienes permisos para realizar esta acción.",
+  404: "El recurso solicitado no fue encontrado.",
+  409: "Conflicto: la operación no se puede completar en el estado actual.",
+  422: "Datos de entrada inválidos. Revisa los campos del formulario.",
+  429: "Has realizado demasiadas solicitudes. Espera un momento.",
+  500: "Error interno del servidor. Intenta de nuevo más tarde.",
+  502: "El servidor no está disponible temporalmente.",
+  503: "Servicio no disponible. Intenta de nuevo en unos minutos.",
+};
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
+    });
+  } catch (err) {
+    throw new Error("No se pudo conectar con el servidor. Verifica tu conexión a internet.");
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     if (res.status === 401 && typeof window !== "undefined") {
@@ -236,7 +259,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       localStorage.removeItem("vc_user");
       throw new Error("Sesión inválida o expirada. Inicia sesión de nuevo.");
     }
-    throw new Error(body.detail || `Error ${res.status}`);
+    const detail = body.detail;
+    const fallback = ERROR_MESSAGES[res.status] || `Error inesperado (${res.status})`;
+    throw new Error(typeof detail === "string" ? detail : fallback);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -401,6 +426,8 @@ export async function askAIChat(question: string): Promise<AIChatAskResponse> {
   return {
     answer: result.answer,
     scope: result.scope,
+    toolResultsUsed: result.tool_results_used ?? [],
+    conversationId: result.conversation_id ?? null,
   };
 }
 
@@ -411,6 +438,9 @@ export async function listAIChatHistory(limit = 20): Promise<AIChatHistoryItem[]
     question: item.question,
     answer: item.answer,
     scope: item.scope,
+    role: item.role ?? null,
+    toolsUsed: item.tools_used ?? null,
+    latencyMs: item.latency_ms ?? null,
     createdAt: item.created_at,
   }));
 }
