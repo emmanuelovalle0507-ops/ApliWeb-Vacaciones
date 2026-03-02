@@ -87,13 +87,18 @@ export interface AIChatHistoryItem {
   id: number;
   question: string;
   answer: string;
-  scope: "TEAM" | "GLOBAL";
+  scope: string;
+  role?: string | null;
+  toolsUsed?: string | null;
+  latencyMs?: number | null;
   createdAt: string;
 }
 
 export interface AIChatAskResponse {
   answer: string;
-  scope: "TEAM" | "GLOBAL";
+  scope: string;
+  toolResultsUsed?: string[];
+  conversationId?: string | null;
 }
 
 export interface TeamPolicyOut {
