@@ -11,6 +11,7 @@ import { RoleBadge } from "@/components/ui/Badge";
 import Select from "@/components/ui/Select";
 import RequestsTable from "@/components/vacations/RequestsTable";
 import { RequestFiltersBar, UserFiltersBar } from "@/components/vacations/Filters";
+import AIChatPanel from "@/components/ai/AIChatPanel";
 
 export default function HRDashboardPage() {
   const currentYear = new Date().getFullYear();
@@ -101,7 +102,7 @@ export default function HRDashboardPage() {
             onAreaChange={setUserArea}
             onSearchChange={setUserSearch}
           />
-          <Table columns={userColumns} data={usersQ.data ?? []} isLoading={usersQ.isLoading} emptyMessage="No se encontraron usuarios." />
+          <Table columns={userColumns} data={usersQ.data ?? []} isLoading={usersQ.isLoading} isError={usersQ.isError} errorMessage="Error al cargar usuarios." onRetry={() => void usersQ.refetch()} emptyMessage="No se encontraron usuarios." />
         </div>
       ),
     },
@@ -145,7 +146,7 @@ export default function HRDashboardPage() {
               options={yearOptions}
             />
           </div>
-          <Table columns={balanceColumns} data={(balancesQ.data ?? []) as BalanceRow[]} isLoading={balancesQ.isLoading} emptyMessage="No hay balances para este año." />
+          <Table columns={balanceColumns} data={(balancesQ.data ?? []) as BalanceRow[]} isLoading={balancesQ.isLoading} isError={balancesQ.isError} errorMessage="Error al cargar balances." onRetry={() => void balancesQ.refetch()} emptyMessage="No hay balances para este año." />
         </div>
       ),
     },
@@ -162,6 +163,8 @@ export default function HRDashboardPage() {
         </div>
 
         <Tabs tabs={tabs} defaultTab="users" />
+
+        <AIChatPanel title="Asistente IA (HR — Solo lectura)" />
       </div>
     </RoleGuard>
   );
