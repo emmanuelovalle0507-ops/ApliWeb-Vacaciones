@@ -264,27 +264,60 @@ export async function listMyNotifications(userId: string): Promise<NotificationE
 
 // ── AI Chat ─────────────────────────────────────────────
 export async function askAIChat(question: string): Promise<AIChatAskResponse> {
-  await delay(250);
+  await delay(800);
   const q = question.toLowerCase();
+
+  if (q.includes("saldo") || q.includes("días") || q.includes("quedan")) {
+    return {
+      answer: "Tu saldo actual (demo): 15 días otorgados, 3 usados, 12 disponibles para el año 2026.",
+      scope: "PERSONAL",
+      toolResultsUsed: ["get_my_balance"],
+      conversationId: `mock-${Date.now()}`,
+    };
+  }
 
   if (q.includes("estado") || q.includes("resumen")) {
     return {
       answer: "Estado actual (demo): equipo con 4 empleados activos, 1 fuera hoy y 2 solicitudes pendientes.",
       scope: "TEAM",
+      toolResultsUsed: ["get_team_summary"],
+      conversationId: `mock-${Date.now()}`,
     };
   }
 
-  if (q.includes("siguiente mes") || q.includes("próximo mes") || q.includes("proximo mes")) {
+  if (q.includes("solicitud") || q.includes("mis vacacion")) {
     return {
-      answer: "Próximo mes (demo): Carlos López (2026-03-10 a 2026-03-14).",
+      answer: "Tus solicitudes recientes (demo):\n• 2026-01-15 a 2026-01-17 (3 días) — APPROVED\n• 2026-03-10 a 2026-03-14 (5 días) — PENDING",
+      scope: "PERSONAL",
+      toolResultsUsed: ["list_my_requests"],
+      conversationId: `mock-${Date.now()}`,
+    };
+  }
+
+  if (q.includes("pendiente") || q.includes("aprob") || q.includes("rechaz")) {
+    return {
+      answer: "Solicitudes pendientes del equipo (demo):\n• Carlos López: 2026-03-10 a 2026-03-14 (5d) — PENDING\n• Ana García: 2026-04-01 a 2026-04-05 (5d) — PENDING",
       scope: "TEAM",
+      toolResultsUsed: ["list_team_requests"],
+      conversationId: `mock-${Date.now()}`,
+    };
+  }
+
+  if (q.includes("global") || q.includes("resumen general") || q.includes("organización")) {
+    return {
+      answer: "Resumen global (demo): 25 empleados activos, 3 fuera hoy, 5 solicitudes pendientes.\nEmpleados con saldo bajo (<3 días): Juan Pérez (2d), María López (1d).",
+      scope: "GLOBAL",
+      toolResultsUsed: ["get_global_summary"],
+      conversationId: `mock-${Date.now()}`,
     };
   }
 
   return {
     answer:
-      "Solo puedo ayudarte con datos de la app de vacaciones (estado, disponibilidad, aprobaciones/rechazos y motivos).",
-    scope: "TEAM",
+      "Solo puedo ayudarte con datos de la app de vacaciones (saldos, solicitudes, estado del equipo, aprobaciones/rechazos y políticas).",
+    scope: "PERSONAL",
+    toolResultsUsed: [],
+    conversationId: `mock-${Date.now()}`,
   };
 }
 
@@ -293,9 +326,12 @@ export async function listAIChatHistory(): Promise<AIChatHistoryItem[]> {
   return [
     {
       id: 1,
-      question: "¿Cuál es el estado actual del equipo?",
-      answer: "Estado actual (demo): equipo con 4 empleados activos, 1 fuera hoy y 2 solicitudes pendientes.",
-      scope: "TEAM",
+      question: "¿Cuántos días me quedan?",
+      answer: "Tu saldo actual (demo): 15 días otorgados, 3 usados, 12 disponibles para el año 2026.",
+      scope: "PERSONAL",
+      role: "EMPLOYEE",
+      toolsUsed: "get_my_balance",
+      latencyMs: 320,
       createdAt: new Date().toISOString(),
     },
   ];

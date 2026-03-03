@@ -14,6 +14,7 @@ import BalanceCard from "@/components/vacations/BalanceCard";
 import RequestForm from "@/components/vacations/RequestForm";
 import RequestsTable from "@/components/vacations/RequestsTable";
 import CancelDialog from "@/components/vacations/CancelDialog";
+import AIChatPanel from "@/components/ai/AIChatPanel";
 import { useToast } from "@/components/ui/Toast";
 
 export default function EmployeeDashboardPage() {
@@ -124,6 +125,9 @@ export default function EmployeeDashboardPage() {
             emptyMessage="No tienes solicitudes de vacaciones."
           />
         </div>
+
+        {/* AI Assistant */}
+        <AIChatPanel title="Asistente IA" />
 
         {/* Cancel dialog */}
         <CancelDialog

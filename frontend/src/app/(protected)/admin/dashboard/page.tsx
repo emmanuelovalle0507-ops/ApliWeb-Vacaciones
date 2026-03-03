@@ -161,7 +161,7 @@ export default function AdminDashboardPage() {
             onAreaChange={setUserArea}
             onSearchChange={setUserSearch}
           />
-          <Table columns={userColumns} data={usersQ.data ?? []} isLoading={usersQ.isLoading} emptyMessage="No se encontraron usuarios." />
+          <Table columns={userColumns} data={usersQ.data ?? []} isLoading={usersQ.isLoading} isError={usersQ.isError} errorMessage="Error al cargar usuarios." onRetry={() => void usersQ.refetch()} emptyMessage="No se encontraron usuarios." />
         </div>
       ),
     },
@@ -206,7 +206,7 @@ export default function AdminDashboardPage() {
               options={yearOptions}
             />
           </div>
-          <Table columns={balanceColumns} data={(balancesQ.data ?? []) as BalanceRow[]} isLoading={balancesQ.isLoading} emptyMessage="No hay balances para este año." />
+          <Table columns={balanceColumns} data={(balancesQ.data ?? []) as BalanceRow[]} isLoading={balancesQ.isLoading} isError={balancesQ.isError} errorMessage="Error al cargar balances." onRetry={() => void balancesQ.refetch()} emptyMessage="No hay balances para este año." />
         </div>
       ),
     },

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { User, UserRole } from "@/types";
 import { getSession, setSession, clearSession, dashboardPathForRole } from "@/lib/auth";
 import api from "@/api/client";
@@ -61,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const session = getSession();
@@ -77,16 +79,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
+      queryClient.clear();
       const res = await api.auth.login(email, password);
       setSession(res.token, res.user);
       setUser(res.user);
       router.push(dashboardPathForRole(res.user.role));
     },
-    [router]
+    [router, queryClient]
   );
 
   const loginDemo = useCallback(
     async (role: UserRole = "ADMIN") => {
+      queryClient.clear();
       if (API_MODE === "real") {
         const creds = REAL_DEMO_CREDENTIALS[role];
         if (!creds) {
@@ -106,14 +110,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(demoUser);
       router.push(dashboardPathForRole(demoUser.role));
     },
-    [router]
+    [router, queryClient]
   );
 
   const logout = useCallback(() => {
+    queryClient.clear();
     clearSession();
     setUser(null);
     router.push("/login");
-  }, [router]);
+  }, [router, queryClient]);
 
   return (
     <AuthContext.Provider
