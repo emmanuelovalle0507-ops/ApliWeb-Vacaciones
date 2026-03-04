@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { RequestStatus, SendStatus } from "@/types";
+import type { RequestStatus, EmailStatus } from "@/types";
 import { STATUS_LABELS } from "@/types";
 
 const statusStyles: Record<RequestStatus, string> = {
@@ -21,19 +21,21 @@ export function StatusBadge({ status }: { status: RequestStatus }) {
   );
 }
 
-const sendStyles: Record<SendStatus, string> = {
+const sendStyles: Record<EmailStatus, string> = {
   PENDING: "bg-yellow-100 text-yellow-800 border-yellow-200",
   SENT: "bg-green-100 text-green-800 border-green-200",
   FAILED: "bg-red-100 text-red-800 border-red-200",
+  SKIPPED: "bg-gray-100 text-gray-600 border-gray-200",
 };
 
-const sendLabels: Record<SendStatus, string> = {
+const sendLabels: Record<EmailStatus, string> = {
   PENDING: "Pendiente",
   SENT: "Enviado",
   FAILED: "Fallido",
+  SKIPPED: "Omitido",
 };
 
-export function SendStatusBadge({ status }: { status: SendStatus }) {
+export function SendStatusBadge({ status }: { status: EmailStatus }) {
   return (
     <span
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${sendStyles[status]}`}
