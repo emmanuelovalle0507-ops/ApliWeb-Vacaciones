@@ -5,8 +5,9 @@ export type NotificationType =
   | "REQUEST_CREATED"
   | "REQUEST_APPROVED"
   | "REQUEST_REJECTED"
-  | "REQUEST_CANCELED";
-export type SendStatus = "PENDING" | "SENT" | "FAILED";
+  | "REQUEST_CANCELLED"
+  | "POLICY_UPDATED";
+export type EmailStatus = "PENDING" | "SENT" | "FAILED" | "SKIPPED";
 
 export const USER_ROLES: UserRole[] = ["EMPLOYEE", "MANAGER", "ADMIN", "HR"];
 export const REQUEST_STATUSES: RequestStatus[] = ["PENDING", "APPROVED", "REJECTED", "CANCELED"];
@@ -68,13 +69,13 @@ export interface VacationRequest {
 
 export interface NotificationEvent {
   id: string;
-  userId: string;
   type: NotificationType;
-  channel: "EMAIL";
-  toEmail: string;
-  subject: string;
-  sendStatus: SendStatus;
-  sentAt?: string;
+  title: string;
+  body: string;
+  entityType?: string;
+  entityId?: string;
+  isRead: boolean;
+  emailStatus: EmailStatus;
   createdAt: string;
 }
 

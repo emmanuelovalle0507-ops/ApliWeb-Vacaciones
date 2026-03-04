@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
-import { Menu, Bell } from "lucide-react";
+import { Menu } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { ROLE_LABELS } from "@/types";
+import NotificationPanel from "@/components/notifications/NotificationPanel";
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -35,9 +36,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-4">
-        <button className="relative p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-          <Bell size={20} />
-        </button>
+        <NotificationPanel />
 
         <div className="hidden sm:flex items-center gap-3 pl-4 border-l border-gray-200">
           <div className="text-right">

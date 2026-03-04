@@ -44,6 +44,9 @@ export const api = {
   },
   notifications: {
     listMine: impl.listMyNotifications,
+    getUnreadCount: impl.getUnreadCount,
+    markRead: impl.markNotificationRead,
+    markAllRead: impl.markAllNotificationsRead,
   },
   ai: {
     ask: impl.askAIChat,

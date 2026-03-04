@@ -17,6 +17,7 @@ from app.repositories.team_repo import TeamRepository
 from app.repositories.user_repo import UserRepository
 from app.repositories.vacation_balance_repo import VacationBalanceRepository
 from app.repositories.vacation_request_repo import VacationRequestRepository
+from app.services.notification_service import NotificationService
 
 
 class PolicyValidationError(ValueError):
@@ -33,6 +34,7 @@ class VacationRequestService:
         self.audit_repo = AuditRepository(db)
         self.team_repo = TeamRepository(db)
         self.policy_repo = TeamPolicyRepository(db)
+        self.notif_service = NotificationService(db)
 
     @staticmethod
     def _calculate_requested_days(start_date: date, end_date: date) -> Decimal:
@@ -260,6 +262,20 @@ class VacationRequestService:
             )
         )
         self.db.flush()
+
+        try:
+            mgr = self.user_repo.get_by_id(str(employee.manager_id))
+            self.notif_service.notify_request_created(
+                request_id=str(created.id),
+                employee_name=employee.full_name,
+                manager_id=str(employee.manager_id),
+                start_date=start_date.strftime("%d/%m/%Y"),
+                end_date=end_date.strftime("%d/%m/%Y"),
+                days=self._to_float(requested_days),
+            )
+        except Exception:
+            pass  # notification failure must not block request creation
+
         return created
 
     def list_my_requests(self, employee_id: str) -> list[VacationRequest]:
@@ -332,6 +348,19 @@ class VacationRequestService:
         )
         self.db.flush()
 
+        try:
+            employee = self.user_repo.get_by_id(str(request.employee_id))
+            self.notif_service.notify_request_approved(
+                request_id=str(request.id),
+                employee_id=str(request.employee_id),
+                manager_name=manager.full_name,
+                start_date=request.start_date.strftime("%d/%m/%Y"),
+                end_date=request.end_date.strftime("%d/%m/%Y"),
+                days=self._to_float(request.requested_days),
+            )
+        except Exception:
+            pass
+
         primary_balance = balances_to_update[0][0] if balances_to_update else None
         if not primary_balance:
             raise ValueError("Error interno al actualizar balance.")
@@ -369,6 +398,19 @@ class VacationRequestService:
             )
         )
         self.db.flush()
+
+        try:
+            self.notif_service.notify_request_rejected(
+                request_id=str(request.id),
+                employee_id=str(request.employee_id),
+                manager_name=manager.full_name,
+                start_date=request.start_date.strftime("%d/%m/%Y"),
+                end_date=request.end_date.strftime("%d/%m/%Y"),
+                comment=decision_comment,
+            )
+        except Exception:
+            pass
+
         return request
 
     def cancel(self, request_id: str, employee_id: str) -> VacationRequest:
@@ -394,6 +436,20 @@ class VacationRequestService:
             )
         )
         self.db.flush()
+
+        try:
+            employee = self.user_repo.get_by_id(employee_id)
+            if employee and request.manager_id:
+                self.notif_service.notify_request_cancelled(
+                    request_id=str(request.id),
+                    employee_name=employee.full_name,
+                    manager_id=str(request.manager_id),
+                    start_date=request.start_date.strftime("%d/%m/%Y"),
+                    end_date=request.end_date.strftime("%d/%m/%Y"),
+                )
+        except Exception:
+            pass
+
         return request
 
     def get_my_balance(self, employee_id: str, year: int) -> VacationBalance:
