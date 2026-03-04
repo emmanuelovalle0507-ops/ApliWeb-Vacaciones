@@ -9,10 +9,21 @@ from app.db.session import get_db
 from app.schemas.auth import UserSummary
 from app.schemas.vacation_balance import VacationBalanceOut
 from app.mappers.vacation_request_mapper import vacation_request_to_out as _to_out, vacation_request_to_out_enriched as _to_out_enriched
-from app.schemas.vacation_request import VacationRequestCreate, VacationRequestList, VacationRequestOut
+from app.schemas.vacation_request import PreValidateRequest, PreValidateResponse, VacationRequestCreate, VacationRequestList, VacationRequestOut
 from app.services.vacation_request_service import PolicyValidationError, VacationRequestService
 
 router = APIRouter(prefix="/vacation-requests", tags=["vacation-requests"])
+
+
+@router.post("/validate", response_model=PreValidateResponse)
+def pre_validate_request(
+    payload: PreValidateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("EMPLOYEE", "MANAGER")),
+) -> PreValidateResponse:
+    service = VacationRequestService(db)
+    result = service.pre_validate(current_user.id, payload.start_date, payload.end_date)
+    return PreValidateResponse(**result)
 
 
 @router.post("", response_model=VacationRequestOut)

@@ -40,3 +40,16 @@ class VacationApprovalResponse(BaseModel):
 
 class VacationRequestList(BaseModel):
     items: list[VacationRequestOut] = Field(default_factory=list)
+
+
+class PreValidateRequest(BaseModel):
+    start_date: date
+    end_date: date
+
+
+class PreValidateResponse(BaseModel):
+    valid: bool
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    requested_days: float = 0
+    balance_by_year: dict[int, dict[str, float]] = Field(default_factory=dict)

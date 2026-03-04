@@ -2,14 +2,17 @@
 
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ClipboardList, Users, CheckCircle } from "lucide-react";
+import { ClipboardList, Users, CheckCircle, Shield, MessageSquare } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import api from "@/api/client";
 import type { VacationRequest } from "@/types";
 import RoleGuard from "@/components/layout/RoleGuard";
 import Card, { CardBody } from "@/components/ui/Card";
+import Tabs from "@/components/ui/Tabs";
 import RequestsTable from "@/components/vacations/RequestsTable";
 import ApprovalModal from "@/components/vacations/ApprovalModal";
+import TeamPolicyForm from "@/components/vacations/TeamPolicyForm";
+import TeamPolicyAgentPanel from "@/components/ai/TeamPolicyAgentPanel";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import { useToast } from "@/components/ui/Toast";
 
@@ -87,12 +90,54 @@ export default function ManagerDashboardPage() {
 
   const teamCount = teamMembersQ.data?.length ?? 0;
 
+  const tabs = [
+    {
+      id: "requests",
+      label: "Solicitudes Pendientes",
+      content: (
+        <div className="space-y-4">
+          <RequestsTable
+            data={pendingQ.data ?? []}
+            isLoading={pendingQ.isLoading}
+            showEmployee
+            showActions
+            onApprove={(req) => openModal(req, "approve")}
+            onReject={(req) => openModal(req, "reject")}
+            emptyMessage="No hay solicitudes pendientes."
+          />
+          <ApprovalModal
+            open={modalOpen}
+            onClose={() => { setModalOpen(false); setSelectedReq(null); }}
+            request={selectedReq}
+            action={modalAction}
+            onConfirm={handleConfirm}
+          />
+        </div>
+      ),
+    },
+    {
+      id: "policies",
+      label: "Políticas de Equipo",
+      content: (
+        <div className="space-y-6">
+          <TeamPolicyForm />
+          <TeamPolicyAgentPanel title="Configurar Política con IA" />
+        </div>
+      ),
+    },
+    {
+      id: "ai",
+      label: "Asistente IA",
+      content: <AIChatPanel title="Asistente IA (Manager)" />,
+    },
+  ];
+
   return (
     <RoleGuard allowed={["MANAGER"]}>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard de Manager</h1>
-          <p className="text-sm text-gray-500 mt-1">Gestiona las solicitudes de tu equipo</p>
+          <p className="text-sm text-gray-500 mt-1">Gestiona las solicitudes y políticas de tu equipo</p>
         </div>
 
         {/* Stats */}
@@ -135,32 +180,8 @@ export default function ManagerDashboardPage() {
           </Card>
         </div>
 
-        {/* Pending requests */}
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">
-            Solicitudes Pendientes de Aprobación
-          </h2>
-          <RequestsTable
-            data={pendingQ.data ?? []}
-            isLoading={pendingQ.isLoading}
-            showEmployee
-            showActions
-            onApprove={(req) => openModal(req, "approve")}
-            onReject={(req) => openModal(req, "reject")}
-            emptyMessage="No hay solicitudes pendientes."
-          />
-        </div>
-
-        {/* Approval modal */}
-        <ApprovalModal
-          open={modalOpen}
-          onClose={() => { setModalOpen(false); setSelectedReq(null); }}
-          request={selectedReq}
-          action={modalAction}
-          onConfirm={handleConfirm}
-        />
-
-        <AIChatPanel title="Asistente IA (Manager)" />
+        {/* Tabs: Solicitudes | Políticas | IA */}
+        <Tabs tabs={tabs} defaultTab="requests" />
       </div>
     </RoleGuard>
   );
