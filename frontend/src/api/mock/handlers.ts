@@ -57,6 +57,44 @@ export async function getMyBalance(userId: string, year: number): Promise<Vacati
 }
 
 // ── Requests ───────────────────────────────────────────
+export async function preValidateRequest(
+  startDate: string,
+  endDate: string
+): Promise<{
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  requestedDays: number;
+  balanceByYear: Record<number, { requested: number; available: number }>;
+}> {
+  await delay(300);
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (end < start) errors.push("La fecha de fin debe ser igual o posterior a la de inicio.");
+  if (start < new Date()) errors.push("La fecha de inicio no puede ser en el pasado.");
+
+  const days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  const businessDays = Math.ceil(days * 5 / 7);
+  const year = start.getFullYear();
+
+  if (businessDays > 12) {
+    errors.push(`No tienes suficientes días para el año ${year}. Disponibles: 12, solicitados: ${businessDays}.`);
+  } else if (12 - businessDays <= 2) {
+    warnings.push(`Después de esta solicitud solo te quedarían ${12 - businessDays} día(s) para ${year}.`);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+    requestedDays: businessDays,
+    balanceByYear: { [year]: { requested: businessDays, available: 12 } },
+  };
+}
+
 export async function createRequest(
   userId: string,
   payload: CreateRequestPayload
@@ -338,6 +376,26 @@ export async function listAIChatHistory(): Promise<AIChatHistoryItem[]> {
 }
 
 // ── Team Policies (Agentic Setup) ─────────────────────
+export async function upsertTeamPolicy(payload: {
+  teamId: string;
+  maxPeopleOffPerDay: number;
+  minNoticeDays: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+}): Promise<TeamPolicyOut> {
+  await delay(400);
+  return {
+    id: Date.now(),
+    teamId: payload.teamId,
+    maxPeopleOffPerDay: payload.maxPeopleOffPerDay,
+    minNoticeDays: payload.minNoticeDays,
+    effectiveFrom: payload.effectiveFrom,
+    effectiveTo: payload.effectiveTo ?? null,
+    createdBy: "demo-manager",
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export async function getMyTeamPolicy(): Promise<TeamPolicyOut> {
   await delay(200);
   return {

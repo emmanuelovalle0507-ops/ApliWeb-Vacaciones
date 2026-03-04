@@ -297,6 +297,35 @@ export async function getMyBalance(_userId: string, year: number): Promise<Vacat
 }
 
 // ── Requests ───────────────────────────────────────────
+export async function preValidateRequest(
+  startDate: string,
+  endDate: string
+): Promise<{
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  requestedDays: number;
+  balanceByYear: Record<number, { requested: number; available: number }>;
+}> {
+  const result = await request<{
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+    requested_days: number;
+    balance_by_year: Record<number, { requested: number; available: number }>;
+  }>("/vacation-requests/validate", {
+    method: "POST",
+    body: JSON.stringify({ start_date: startDate, end_date: endDate }),
+  });
+  return {
+    valid: result.valid,
+    errors: result.errors,
+    warnings: result.warnings,
+    requestedDays: result.requested_days,
+    balanceByYear: result.balance_by_year,
+  };
+}
+
 export async function createRequest(
   _userId: string,
   payload: CreateRequestPayload
@@ -446,6 +475,26 @@ export async function listAIChatHistory(limit = 20): Promise<AIChatHistoryItem[]
 }
 
 // ── Team Policies (Agentic Setup) ─────────────────────
+export async function upsertTeamPolicy(payload: {
+  teamId: string;
+  maxPeopleOffPerDay: number;
+  minNoticeDays: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+}): Promise<TeamPolicyOut> {
+  const policy = await request<BackendTeamPolicy>("/team-policies", {
+    method: "PUT",
+    body: JSON.stringify({
+      team_id: payload.teamId,
+      max_people_off_per_day: payload.maxPeopleOffPerDay,
+      min_notice_days: payload.minNoticeDays,
+      effective_from: payload.effectiveFrom,
+      effective_to: payload.effectiveTo ?? null,
+    }),
+  });
+  return mapTeamPolicy(policy);
+}
+
 export async function getMyTeamPolicy(): Promise<TeamPolicyOut> {
   const policy = await request<BackendTeamPolicy>("/team-policies/me");
   return mapTeamPolicy(policy);
