@@ -100,13 +100,14 @@ const initialRequests: VacationRequest[] = [
 ];
 
 // ── Notifications ──────────────────────────────────────
-const initialNotifications: NotificationEvent[] = [
-  { id: "n1", userId: "u3", type: "REQUEST_CREATED", channel: "EMAIL", toEmail: "maria.garcia@empresa.com", subject: "Nueva solicitud de Carlos López", sendStatus: "SENT", sentAt: `${CURRENT_YEAR}-02-22T10:00:00Z`, createdAt: `${CURRENT_YEAR}-02-22T10:00:00Z` },
-  { id: "n2", userId: "u5", type: "REQUEST_APPROVED", channel: "EMAIL", toEmail: "carlos.lopez@empresa.com", subject: "Tu solicitud fue aprobada", sendStatus: "SENT", sentAt: `${CURRENT_YEAR}-02-20T14:30:00Z`, createdAt: `${CURRENT_YEAR}-02-20T14:30:00Z` },
-  { id: "n3", userId: "u5", type: "REQUEST_REJECTED", channel: "EMAIL", toEmail: "carlos.lopez@empresa.com", subject: "Tu solicitud fue rechazada", sendStatus: "SENT", sentAt: `${CURRENT_YEAR - 1}-12-15T09:00:00Z`, createdAt: `${CURRENT_YEAR - 1}-12-15T09:00:00Z` },
-  { id: "n4", userId: "u3", type: "REQUEST_CREATED", channel: "EMAIL", toEmail: "maria.garcia@empresa.com", subject: "Nueva solicitud de Ana Martínez", sendStatus: "SENT", sentAt: `${CURRENT_YEAR}-02-20T11:00:00Z`, createdAt: `${CURRENT_YEAR}-02-20T11:00:00Z` },
-  { id: "n5", userId: "u8", type: "REQUEST_CANCELED", channel: "EMAIL", toEmail: "pedro.sanchez@empresa.com", subject: "Sofía Hernández canceló su solicitud", sendStatus: "SENT", sentAt: `${CURRENT_YEAR}-01-21T08:00:00Z`, createdAt: `${CURRENT_YEAR}-01-21T08:00:00Z` },
-  { id: "n6", userId: "u6", type: "REQUEST_APPROVED", channel: "EMAIL", toEmail: "ana.martinez@empresa.com", subject: "Tu solicitud fue aprobada", sendStatus: "FAILED", createdAt: `${CURRENT_YEAR}-01-05T16:00:00Z` },
+type MockNotification = NotificationEvent & { _ownerId: string };
+const initialNotifications: MockNotification[] = [
+  { id: "n1", _ownerId: "u3", type: "REQUEST_CREATED", title: "Nueva solicitud de vacaciones", body: "Carlos López ha solicitado vacaciones del 10/03 al 14/03 (5 días hábiles). Revísala y toma una decisión.", entityType: "vacation_request", entityId: "r3", isRead: false, emailStatus: "SENT", createdAt: `${CURRENT_YEAR}-02-22T10:00:00Z` },
+  { id: "n2", _ownerId: "u5", type: "REQUEST_APPROVED", title: "Solicitud de vacaciones aprobada ✓", body: "Tu solicitud del 10/03 al 14/03 (5 días) fue aprobada por María García. ¡Disfruta tu descanso!", entityType: "vacation_request", entityId: "r1", isRead: true, emailStatus: "SENT", createdAt: `${CURRENT_YEAR}-02-20T14:30:00Z` },
+  { id: "n3", _ownerId: "u5", type: "REQUEST_REJECTED", title: "Solicitud de vacaciones rechazada", body: "Tu solicitud del 23/12 al 26/12 fue rechazada por María García. Comentario: \"Período de cierre anual.\"", entityType: "vacation_request", entityId: "r6", isRead: true, emailStatus: "SENT", createdAt: `${CURRENT_YEAR - 1}-12-15T09:00:00Z` },
+  { id: "n4", _ownerId: "u3", type: "REQUEST_CREATED", title: "Nueva solicitud de vacaciones", body: "Ana Martínez ha solicitado vacaciones del 20/02 al 24/02 (5 días hábiles). Revísala y toma una decisión.", entityType: "vacation_request", entityId: "r4", isRead: false, emailStatus: "SENT", createdAt: `${CURRENT_YEAR}-02-20T11:00:00Z` },
+  { id: "n5", _ownerId: "u4", type: "REQUEST_CANCELLED", title: "Solicitud cancelada", body: "Sofía Hernández canceló su solicitud de vacaciones del 03/02 al 07/02.", entityType: "vacation_request", entityId: "r7", isRead: false, emailStatus: "SKIPPED", createdAt: `${CURRENT_YEAR}-01-21T08:00:00Z` },
+  { id: "n6", _ownerId: "u6", type: "REQUEST_APPROVED", title: "Solicitud de vacaciones aprobada ✓", body: "Tu solicitud del 01/01 al 03/01 (3 días) fue aprobada por María García.", entityType: "vacation_request", entityId: "r2", isRead: false, emailStatus: "FAILED", createdAt: `${CURRENT_YEAR}-01-05T16:00:00Z` },
 ];
 
 // ── Mutable In-Memory Store ────────────────────────────
@@ -170,9 +171,34 @@ export function updateRequest(id: string, updates: Partial<VacationRequest>): Va
 
 // ── Notification Queries ───────────────────────────────
 export function listNotificationsByUser(userId: string): NotificationEvent[] {
-  return notifications.filter((n) => n.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return notifications
+    .filter((n) => n._ownerId === userId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map(({ _ownerId, ...rest }) => rest);
 }
 
-export function addNotification(n: NotificationEvent): void {
-  notifications = [n, ...notifications];
+export function countUnreadByUser(userId: string): number {
+  return notifications.filter((n) => n._ownerId === userId && !n.isRead).length;
+}
+
+export function markNotifRead(notifId: string, userId: string): boolean {
+  const n = notifications.find((n) => n.id === notifId && n._ownerId === userId);
+  if (!n) return false;
+  n.isRead = true;
+  return true;
+}
+
+export function markAllNotifsRead(userId: string): number {
+  let count = 0;
+  notifications.forEach((n) => {
+    if (n._ownerId === userId && !n.isRead) {
+      n.isRead = true;
+      count++;
+    }
+  });
+  return count;
+}
+
+export function addNotification(ownerId: string, n: NotificationEvent): void {
+  notifications = [{ ...n, _ownerId: ownerId }, ...notifications];
 }

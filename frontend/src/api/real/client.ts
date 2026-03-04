@@ -441,8 +441,49 @@ export async function listTeamMembers(): Promise<User[]> {
 }
 
 // ── Notifications ──────────────────────────────────────
+interface BackendNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  is_read: boolean;
+  email_status: string;
+  created_at: string;
+}
+
+function mapNotification(n: BackendNotification): NotificationEvent {
+  return {
+    id: n.id,
+    type: n.type as NotificationEvent["type"],
+    title: n.title,
+    body: n.body,
+    entityType: n.entity_type ?? undefined,
+    entityId: n.entity_id ?? undefined,
+    isRead: n.is_read,
+    emailStatus: n.email_status as NotificationEvent["emailStatus"],
+    createdAt: n.created_at,
+  };
+}
+
 export async function listMyNotifications(_userId: string): Promise<NotificationEvent[]> {
-  return [];
+  const result = await request<{ items: BackendNotification[]; unread_count: number }>("/notifications/me");
+  return result.items.map(mapNotification);
+}
+
+export async function getUnreadCount(): Promise<number> {
+  const result = await request<{ unread_count: number }>("/notifications/me/count");
+  return result.unread_count;
+}
+
+export async function markNotificationRead(notificationId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/notifications/${notificationId}/read`, { method: "PATCH" });
+}
+
+export async function markAllNotificationsRead(): Promise<number> {
+  const result = await request<{ marked_count: number }>("/notifications/me/read-all", { method: "POST" });
+  return result.marked_count;
 }
 
 // ── AI Chat ─────────────────────────────────────────────

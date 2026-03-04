@@ -130,15 +130,15 @@ export async function createRequest(
   if (user.managerId) {
     const manager = db.findUserById(user.managerId);
     if (manager) {
-      db.addNotification({
+      db.addNotification(manager.id, {
         id: db.genId("n"),
-        userId: manager.id,
         type: "REQUEST_CREATED",
-        channel: "EMAIL",
-        toEmail: manager.email,
-        subject: `Nueva solicitud de ${user.fullName}`,
-        sendStatus: "SENT",
-        sentAt: new Date().toISOString(),
+        title: "Nueva solicitud de vacaciones",
+        body: `${user.fullName} ha solicitado vacaciones del ${payload.startDate} al ${payload.endDate}.`,
+        entityType: "vacation_request",
+        entityId: req.id,
+        isRead: false,
+        emailStatus: "SENT",
         createdAt: new Date().toISOString(),
       });
     }
@@ -193,15 +193,15 @@ export async function approveRequest(
   // notification to employee
   const employee = db.findUserById(req.userId);
   if (employee) {
-    db.addNotification({
+    db.addNotification(employee.id, {
       id: db.genId("n"),
-      userId: employee.id,
       type: "REQUEST_APPROVED",
-      channel: "EMAIL",
-      toEmail: employee.email,
-      subject: "Tu solicitud de vacaciones fue aprobada",
-      sendStatus: "SENT",
-      sentAt: new Date().toISOString(),
+      title: "Solicitud de vacaciones aprobada ✓",
+      body: `Tu solicitud del ${req.startDate} al ${req.endDate} fue aprobada por ${decider?.fullName ?? "tu manager"}. ¡Disfruta tu descanso!`,
+      entityType: "vacation_request",
+      entityId: req.id,
+      isRead: false,
+      emailStatus: "SENT",
       createdAt: new Date().toISOString(),
     });
   }
@@ -231,15 +231,15 @@ export async function rejectRequest(
 
   const employee = db.findUserById(req.userId);
   if (employee) {
-    db.addNotification({
+    db.addNotification(employee.id, {
       id: db.genId("n"),
-      userId: employee.id,
       type: "REQUEST_REJECTED",
-      channel: "EMAIL",
-      toEmail: employee.email,
-      subject: "Tu solicitud de vacaciones fue rechazada",
-      sendStatus: "SENT",
-      sentAt: new Date().toISOString(),
+      title: "Solicitud de vacaciones rechazada",
+      body: `Tu solicitud del ${req.startDate} al ${req.endDate} fue rechazada por ${decider?.fullName ?? "tu manager"}.${comment ? ` Comentario: "${comment}"` : ""}`,
+      entityType: "vacation_request",
+      entityId: req.id,
+      isRead: false,
+      emailStatus: "SENT",
       createdAt: new Date().toISOString(),
     });
   }
@@ -298,6 +298,24 @@ export async function listTeamMembers(): Promise<User[]> {
 export async function listMyNotifications(userId: string): Promise<NotificationEvent[]> {
   await delay(200);
   return db.listNotificationsByUser(userId);
+}
+
+export async function getUnreadCount(): Promise<number> {
+  await delay(100);
+  const stored = typeof window !== "undefined" ? localStorage.getItem("mock_user_id") : null;
+  return db.countUnreadByUser(stored ?? "u5");
+}
+
+export async function markNotificationRead(notificationId: string): Promise<void> {
+  await delay(150);
+  const stored = typeof window !== "undefined" ? localStorage.getItem("mock_user_id") : null;
+  db.markNotifRead(notificationId, stored ?? "u5");
+}
+
+export async function markAllNotificationsRead(): Promise<number> {
+  await delay(200);
+  const stored = typeof window !== "undefined" ? localStorage.getItem("mock_user_id") : null;
+  return db.markAllNotifsRead(stored ?? "u5");
 }
 
 // ── AI Chat ─────────────────────────────────────────────
