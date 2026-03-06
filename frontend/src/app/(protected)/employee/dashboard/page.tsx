@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, CalendarCheck, Clock, TrendingUp, Palmtree } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import api from "@/api/client";
 import type { CreateRequestFormData } from "@/types/schemas";
@@ -89,6 +89,90 @@ export default function EmployeeDashboardPage() {
             {showForm ? "Cerrar formulario" : "Nueva Solicitud"}
           </Button>
         </div>
+
+        {/* Stat Cards */}
+        {(() => {
+          const balance = balanceQ.data;
+          const requests = requestsQ.data ?? [];
+          const pending = requests.filter((r) => r.status === "PENDING").length;
+          const nextApproved = requests
+            .filter((r) => r.status === "APPROVED" && r.startDate >= new Date().toISOString().slice(0, 10))
+            .sort((a, b) => a.startDate.localeCompare(b.startDate))[0];
+          const totalDays = balance ? balance.grantedDays + balance.carriedOverDays : 0;
+          const usedPct = totalDays > 0 && balance ? Math.round((balance.usedDays / totalDays) * 100) : 0;
+
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Available days */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-emerald-50 text-emerald-500">
+                    <Palmtree size={20} />
+                  </div>
+                  <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">{year}</span>
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{balance?.availableDays ?? "—"}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Días disponibles</p>
+              </div>
+
+              {/* Used progress */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-blue-50 text-blue-500">
+                    <TrendingUp size={20} />
+                  </div>
+                  <span className="text-xs font-semibold text-gray-500">{usedPct}%</span>
+                </div>
+                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, usedPct)}%` }}
+                  />
+                </div>
+                <p className="text-sm font-semibold text-gray-900">{balance?.usedDays ?? 0} / {totalDays}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Días usados</p>
+              </div>
+
+              {/* Pending */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-amber-50 text-amber-500">
+                    <Clock size={20} />
+                  </div>
+                  {pending > 0 && (
+                    <span className="flex items-center justify-center w-5 h-5 text-[10px] font-bold bg-amber-500 text-white rounded-full">{pending}</span>
+                  )}
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{pending}</p>
+                <p className="text-xs text-gray-400 mt-0.5">Solicitudes pendientes</p>
+              </div>
+
+              {/* Next vacation */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-violet-50 text-violet-500">
+                    <CalendarCheck size={20} />
+                  </div>
+                </div>
+                {nextApproved ? (
+                  <>
+                    <p className="text-lg font-bold text-gray-900">
+                      {new Date(nextApproved.startDate + "T12:00:00").toLocaleDateString("es-MX", { day: "numeric", month: "short" })}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Próximas vacaciones ({nextApproved.requestedBusinessDays} días)
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-lg font-bold text-gray-300">—</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Sin vacaciones próximas</p>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Balance */}
         <BalanceCard balance={balanceQ.data ?? null} isLoading={balanceQ.isLoading} />
