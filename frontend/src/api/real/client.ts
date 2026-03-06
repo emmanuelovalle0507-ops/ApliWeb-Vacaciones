@@ -298,6 +298,35 @@ export async function getMyBalance(_userId: string, year: number): Promise<Vacat
 }
 
 // ── Requests ───────────────────────────────────────────
+export async function preValidateRequest(
+  startDate: string,
+  endDate: string
+): Promise<{
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  requestedDays: number;
+  balanceByYear: Record<number, { requested: number; available: number }>;
+}> {
+  const result = await request<{
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+    requested_days: number;
+    balance_by_year: Record<number, { requested: number; available: number }>;
+  }>("/vacation-requests/validate", {
+    method: "POST",
+    body: JSON.stringify({ start_date: startDate, end_date: endDate }),
+  });
+  return {
+    valid: result.valid,
+    errors: result.errors,
+    warnings: result.warnings,
+    requestedDays: result.requested_days,
+    balanceByYear: result.balance_by_year,
+  };
+}
+
 export async function createRequest(
   _userId: string,
   payload: CreateRequestPayload
@@ -413,8 +442,49 @@ export async function listTeamMembers(): Promise<User[]> {
 }
 
 // ── Notifications ──────────────────────────────────────
+interface BackendNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  is_read: boolean;
+  email_status: string;
+  created_at: string;
+}
+
+function mapNotification(n: BackendNotification): NotificationEvent {
+  return {
+    id: n.id,
+    type: n.type as NotificationEvent["type"],
+    title: n.title,
+    body: n.body,
+    entityType: n.entity_type ?? undefined,
+    entityId: n.entity_id ?? undefined,
+    isRead: n.is_read,
+    emailStatus: n.email_status as NotificationEvent["emailStatus"],
+    createdAt: n.created_at,
+  };
+}
+
 export async function listMyNotifications(_userId: string): Promise<NotificationEvent[]> {
-  return [];
+  const result = await request<{ items: BackendNotification[]; unread_count: number }>("/notifications/me");
+  return result.items.map(mapNotification);
+}
+
+export async function getUnreadCount(): Promise<number> {
+  const result = await request<{ unread_count: number }>("/notifications/me/count");
+  return result.unread_count;
+}
+
+export async function markNotificationRead(notificationId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/notifications/${notificationId}/read`, { method: "PATCH" });
+}
+
+export async function markAllNotificationsRead(): Promise<number> {
+  const result = await request<{ marked_count: number }>("/notifications/me/read-all", { method: "POST" });
+  return result.marked_count;
 }
 
 // ── AI Chat ─────────────────────────────────────────────
@@ -447,6 +517,26 @@ export async function listAIChatHistory(limit = 20): Promise<AIChatHistoryItem[]
 }
 
 // ── Team Policies (Agentic Setup) ─────────────────────
+export async function upsertTeamPolicy(payload: {
+  teamId: string;
+  maxPeopleOffPerDay: number;
+  minNoticeDays: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+}): Promise<TeamPolicyOut> {
+  const policy = await request<BackendTeamPolicy>("/team-policies", {
+    method: "PUT",
+    body: JSON.stringify({
+      team_id: payload.teamId,
+      max_people_off_per_day: payload.maxPeopleOffPerDay,
+      min_notice_days: payload.minNoticeDays,
+      effective_from: payload.effectiveFrom,
+      effective_to: payload.effectiveTo ?? null,
+    }),
+  });
+  return mapTeamPolicy(policy);
+}
+
 export async function getMyTeamPolicy(): Promise<TeamPolicyOut> {
   const policy = await request<BackendTeamPolicy>("/team-policies/me");
   return mapTeamPolicy(policy);

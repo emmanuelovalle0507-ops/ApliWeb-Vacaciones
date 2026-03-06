@@ -23,6 +23,7 @@ export const api = {
     getMyBalance: impl.getMyBalance,
   },
   requests: {
+    preValidate: impl.preValidateRequest,
     create: impl.createRequest,
     listMine: impl.listMyRequests,
     cancel: impl.cancelRequest,
@@ -48,6 +49,9 @@ export const api = {
   },
   notifications: {
     listMine: impl.listMyNotifications,
+    getUnreadCount: impl.getUnreadCount,
+    markRead: impl.markNotificationRead,
+    markAllRead: impl.markAllNotificationsRead,
   },
   ai: {
     ask: impl.askAIChat,
@@ -55,6 +59,7 @@ export const api = {
   },
   teamPolicies: {
     getMy: impl.getMyTeamPolicy,
+    upsert: impl.upsertTeamPolicy,
     getOnboardingQuestions: impl.getTeamPolicyOnboardingQuestions,
     runAgent: impl.runTeamPolicyAgent,
   },

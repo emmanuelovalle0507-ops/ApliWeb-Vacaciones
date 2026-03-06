@@ -18,6 +18,7 @@ from app.repositories.team_repo import TeamRepository
 from app.repositories.user_repo import UserRepository
 from app.repositories.vacation_balance_repo import VacationBalanceRepository
 from app.repositories.vacation_request_repo import VacationRequestRepository
+from app.services.notification_service import NotificationService
 
 
 class PolicyValidationError(ValueError):
@@ -34,6 +35,7 @@ class VacationRequestService:
         self.audit_repo = AuditRepository(db)
         self.team_repo = TeamRepository(db)
         self.policy_repo = TeamPolicyRepository(db)
+        self.notif_service = NotificationService(db)
 
     @staticmethod
     def _calculate_requested_days(start_date: date, end_date: date) -> Decimal:
@@ -58,59 +60,184 @@ class VacationRequestService:
         return datetime.now(timezone.utc).date()
 
     @staticmethod
-    def _iter_days(start_date: date, end_date: date):
+    def _iter_business_days(start_date: date, end_date: date):
         current = start_date
         while current <= end_date:
-            yield current
+            if current.weekday() < 5:
+                yield current
             current = current.fromordinal(current.toordinal() + 1)
 
-    def _validate_team_daily_capacity(self, team_id: str, start_date: date, end_date: date) -> None:
-        for target_day in self._iter_days(start_date, end_date):
+    @staticmethod
+    def _split_days_by_year(start_date: date, end_date: date) -> dict[int, Decimal]:
+        """Split business days count by calendar year."""
+        year_days: dict[int, int] = {}
+        current = start_date
+        while current <= end_date:
+            if current.weekday() < 5:
+                year_days[current.year] = year_days.get(current.year, 0) + 1
+            current = current.fromordinal(current.toordinal() + 1)
+        return {yr: Decimal(cnt) for yr, cnt in year_days.items()}
+
+    def _validate_team_daily_capacity(self, team_id: str, start_date: date, end_date: date) -> list[str]:
+        """Returns list of warning/error messages. Raises on hard block."""
+        warnings: list[str] = []
+        for target_day in self._iter_business_days(start_date, end_date):
             policy = self.policy_repo.get_active_for_date(team_id, target_day)
             if not policy:
-                raise ValueError("Team policy not configured for requested dates")
+                raise PolicyValidationError(
+                    f"No hay política de equipo configurada para la fecha {target_day.strftime('%d/%m/%Y')}. "
+                    "Contacta a tu manager para que configure las reglas del equipo."
+                )
 
             occupied = self.request_repo.count_team_occupied_on_day(team_id, target_day)
             if occupied >= policy.max_people_off_per_day:
-                raise ValueError(f"Team daily capacity reached for {target_day.isoformat()}")
+                raise PolicyValidationError(
+                    f"El {target_day.strftime('%d/%m/%Y')} ya hay {occupied} persona(s) de tu equipo fuera "
+                    f"(máximo permitido: {policy.max_people_off_per_day}). Intenta otras fechas."
+                )
+            elif occupied >= policy.max_people_off_per_day - 1:
+                warnings.append(
+                    f"El {target_day.strftime('%d/%m/%Y')} queda solo 1 lugar disponible en tu equipo."
+                )
+        return warnings
 
-    def create_request(self, employee_id: str, start_date: date, end_date: date, reason: str | None) -> VacationRequest:
+    def _validate_employee_basics(self, employee_id: str):
         employee = self.user_repo.get_by_id(employee_id)
         if not employee:
-            raise ValueError("Employee not found")
+            raise ValueError("Empleado no encontrado.")
         if not employee.manager_id:
-            raise ValueError("Employee has no assigned manager")
+            raise ValueError("No tienes un manager asignado. Contacta al administrador.")
         if not employee.team_id:
-            raise ValueError("Employee has no assigned team")
-
+            raise ValueError("No estás asignado a ningún equipo. Contacta al administrador.")
         manager = self.user_repo.get_by_id(str(employee.manager_id))
         if not manager:
-            raise ValueError("Assigned manager not found")
-        if manager.team_id != employee.team_id:
-            raise ValueError("Employee and manager must belong to the same team")
+            raise ValueError("Tu manager asignado no fue encontrado. Contacta al administrador.")
+        return employee, manager
 
-        if start_date < self._today():
-            raise ValueError("Start date cannot be in the past")
+    def _validate_balance_for_request(self, employee_id: str, start_date: date, end_date: date) -> list[str]:
+        """Check balance covers the requested days, split by year. Returns warnings."""
+        warnings: list[str] = []
+        year_days = self._split_days_by_year(start_date, end_date)
 
-        requested_days = self._calculate_requested_days(start_date, end_date)
-        team_id = str(employee.team_id)
+        for yr, days_needed in year_days.items():
+            balance = self.balance_repo.get_by_user_year(employee_id, yr)
+            if not balance:
+                raise PolicyValidationError(
+                    f"No tienes saldo de vacaciones registrado para el año {yr}. Contacta al administrador."
+                )
+            if balance.available_days < days_needed:
+                raise PolicyValidationError(
+                    f"No tienes suficientes días para el año {yr}. "
+                    f"Disponibles: {self._to_float(balance.available_days)}, solicitados: {self._to_float(days_needed)}."
+                )
+            remaining = balance.available_days - days_needed
+            if remaining <= Decimal("2") and remaining > Decimal("0"):
+                warnings.append(
+                    f"Después de esta solicitud solo te quedarían {self._to_float(remaining)} día(s) para {yr}."
+                )
+        return warnings
 
+    def _validate_notice_days(self, team_id: str, start_date: date) -> None:
+        policy = self.policy_repo.get_active_for_date(team_id, self._today())
+        if not policy:
+            raise PolicyValidationError(
+                "No hay política de equipo configurada. Contacta a tu manager."
+            )
+        notice_days = (start_date - self._today()).days
+        if notice_days < policy.min_notice_days:
+            raise PolicyValidationError(
+                f"La política de tu equipo requiere mínimo {policy.min_notice_days} días de anticipación. "
+                f"Tu solicitud tiene solo {notice_days} día(s) de anticipación."
+            )
+
+    def _validate_overlap(self, employee_id: str, start_date: date, end_date: date) -> None:
         existing = self.request_repo.list_by_employee(employee_id)
         for req in existing:
             if req.status.value in ("PENDING", "APPROVED"):
                 if req.start_date <= end_date and req.end_date >= start_date:
-                    raise ValueError(
-                        f"Overlapping request exists ({req.start_date.isoformat()} - {req.end_date.isoformat()})"
+                    raise PolicyValidationError(
+                        f"Ya tienes una solicitud que se traslapa en las fechas "
+                        f"{req.start_date.strftime('%d/%m/%Y')} - {req.end_date.strftime('%d/%m/%Y')} "
+                        f"(estado: {req.status.value})."
                     )
 
-        policy_today = self.policy_repo.get_active_for_date(team_id, self._today())
-        if not policy_today:
-            raise ValueError("Team policy not configured")
+    def pre_validate(self, employee_id: str, start_date: date, end_date: date) -> dict:
+        """Validate without creating. Returns {valid, errors, warnings, requested_days, balance_by_year}."""
+        errors: list[str] = []
+        warnings: list[str] = []
 
-        notice_days = (start_date - self._today()).days
-        if notice_days < policy_today.min_notice_days and not (reason and reason.strip()):
-            raise PolicyValidationError("Reason is required for requests below minimum notice days")
+        try:
+            employee, manager = self._validate_employee_basics(employee_id)
+        except ValueError as e:
+            return {"valid": False, "errors": [str(e)], "warnings": [], "requested_days": 0, "balance_by_year": {}}
 
+        if start_date < self._today():
+            errors.append("La fecha de inicio no puede ser en el pasado.")
+
+        if end_date < start_date:
+            errors.append("La fecha de fin debe ser igual o posterior a la de inicio.")
+
+        if errors:
+            return {"valid": False, "errors": errors, "warnings": warnings, "requested_days": 0, "balance_by_year": {}}
+
+        try:
+            requested_days = self._calculate_requested_days(start_date, end_date)
+        except ValueError as e:
+            return {"valid": False, "errors": [str(e)], "warnings": warnings, "requested_days": 0, "balance_by_year": {}}
+
+        team_id = str(employee.team_id)
+
+        try:
+            self._validate_overlap(employee_id, start_date, end_date)
+        except PolicyValidationError as e:
+            errors.append(str(e))
+
+        try:
+            self._validate_notice_days(team_id, start_date)
+        except PolicyValidationError as e:
+            errors.append(str(e))
+
+        try:
+            bal_warnings = self._validate_balance_for_request(employee_id, start_date, end_date)
+            warnings.extend(bal_warnings)
+        except PolicyValidationError as e:
+            errors.append(str(e))
+
+        try:
+            cap_warnings = self._validate_team_daily_capacity(team_id, start_date, end_date)
+            warnings.extend(cap_warnings)
+        except PolicyValidationError as e:
+            errors.append(str(e))
+
+        year_days = self._split_days_by_year(start_date, end_date)
+        balance_by_year = {}
+        for yr, days in year_days.items():
+            balance = self.balance_repo.get_by_user_year(employee_id, yr)
+            balance_by_year[yr] = {
+                "requested": self._to_float(days),
+                "available": self._to_float(balance.available_days) if balance else 0,
+            }
+
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+            "requested_days": self._to_float(requested_days),
+            "balance_by_year": balance_by_year,
+        }
+
+    def create_request(self, employee_id: str, start_date: date, end_date: date, reason: str | None) -> VacationRequest:
+        employee, manager = self._validate_employee_basics(employee_id)
+
+        if start_date < self._today():
+            raise ValueError("La fecha de inicio no puede ser en el pasado.")
+
+        requested_days = self._calculate_requested_days(start_date, end_date)
+        team_id = str(employee.team_id)
+
+        self._validate_overlap(employee_id, start_date, end_date)
+        self._validate_notice_days(team_id, start_date)
+        self._validate_balance_for_request(employee_id, start_date, end_date)
         self._validate_team_daily_capacity(team_id, start_date, end_date)
 
         request = VacationRequest(
@@ -136,6 +263,20 @@ class VacationRequestService:
             )
         )
         self.db.flush()
+
+        try:
+            mgr = self.user_repo.get_by_id(str(employee.manager_id))
+            self.notif_service.notify_request_created(
+                request_id=str(created.id),
+                employee_name=employee.full_name,
+                manager_id=str(employee.manager_id),
+                start_date=start_date.strftime("%d/%m/%Y"),
+                end_date=end_date.strftime("%d/%m/%Y"),
+                days=self._to_float(requested_days),
+            )
+        except Exception:
+            pass  # notification failure must not block request creation
+
         return created
 
     def list_my_requests(self, employee_id: str) -> list[VacationRequest]:
@@ -148,32 +289,39 @@ class VacationRequestService:
         manager_uuid = UUID(manager_id)
         request = self.request_repo.get_by_id_for_update(request_id)
         if not request:
-            raise ValueError("Request not found")
+            raise ValueError("Solicitud no encontrada.")
         if request.manager_id != manager_uuid:
-            raise PermissionError("Manager cannot approve this request")
+            raise PermissionError("No puedes aprobar esta solicitud porque no eres el manager asignado.")
         if request.status != VacationRequestStatus.PENDING:
-            raise ValueError("Request already processed")
+            raise ValueError("Esta solicitud ya fue procesada.")
 
         manager = self.user_repo.get_by_id(manager_id)
         if not manager:
-            raise ValueError("Manager not found")
+            raise ValueError("Manager no encontrado.")
         if request.team_id and manager.team_id != request.team_id:
-            raise PermissionError("Manager cannot approve requests from another team")
+            raise PermissionError("No puedes aprobar solicitudes de otro equipo.")
 
         if request.team_id:
             self._validate_team_daily_capacity(str(request.team_id), request.start_date, request.end_date)
 
-        balance_year = request.start_date.year
-        balance = self.balance_repo.get_by_user_year_for_update(str(request.employee_id), balance_year)
-        if not balance:
-            raise ValueError("Vacation balance not found")
+        year_days = self._split_days_by_year(request.start_date, request.end_date)
+        balances_to_update: list[tuple[VacationBalance, Decimal]] = []
 
-        if balance.available_days < request.requested_days:
-            raise ValueError("Insufficient balance")
+        for yr, days_needed in year_days.items():
+            balance = self.balance_repo.get_by_user_year_for_update(str(request.employee_id), yr)
+            if not balance:
+                raise ValueError(f"No se encontró saldo de vacaciones para el año {yr}.")
+            if balance.available_days < days_needed:
+                raise ValueError(
+                    f"Saldo insuficiente para {yr}. "
+                    f"Disponible: {self._to_float(balance.available_days)}, necesario: {self._to_float(days_needed)}."
+                )
+            balances_to_update.append((balance, days_needed))
 
-        balance.available_days -= request.requested_days
-        balance.used_days += request.requested_days
-        balance.version += 1
+        for balance, days_needed in balances_to_update:
+            balance.available_days -= days_needed
+            balance.used_days += days_needed
+            balance.version += 1
 
         request.status = VacationRequestStatus.APPROVED
         request.approved_at = datetime.now(timezone.utc)
@@ -201,25 +349,41 @@ class VacationRequestService:
         )
         self.db.flush()
 
-        return request, balance
+        try:
+            employee = self.user_repo.get_by_id(str(request.employee_id))
+            self.notif_service.notify_request_approved(
+                request_id=str(request.id),
+                employee_id=str(request.employee_id),
+                manager_name=manager.full_name,
+                start_date=request.start_date.strftime("%d/%m/%Y"),
+                end_date=request.end_date.strftime("%d/%m/%Y"),
+                days=self._to_float(request.requested_days),
+            )
+        except Exception:
+            pass
+
+        primary_balance = balances_to_update[0][0] if balances_to_update else None
+        if not primary_balance:
+            raise ValueError("Error interno al actualizar balance.")
+        return request, primary_balance
 
     def reject(self, request_id: str, manager_id: str, decision_comment: str | None) -> VacationRequest:
         manager_uuid = UUID(manager_id)
         request = self.request_repo.get_by_id_for_update(request_id)
         if not request:
-            raise ValueError("Request not found")
+            raise ValueError("Solicitud no encontrada.")
         if request.manager_id != manager_uuid:
-            raise PermissionError("Manager cannot reject this request")
+            raise PermissionError("No puedes rechazar esta solicitud porque no eres el manager asignado.")
         if request.status != VacationRequestStatus.PENDING:
-            raise ValueError("Request already processed")
+            raise ValueError("Esta solicitud ya fue procesada.")
         if not decision_comment or not decision_comment.strip():
-            raise PolicyValidationError("Decision comment is required when rejecting a request")
+            raise PolicyValidationError("Debes escribir un comentario al rechazar una solicitud.")
 
         manager = self.user_repo.get_by_id(manager_id)
         if not manager:
-            raise ValueError("Manager not found")
+            raise ValueError("Manager no encontrado.")
         if request.team_id and manager.team_id != request.team_id:
-            raise PermissionError("Manager cannot reject requests from another team")
+            raise PermissionError("No puedes rechazar solicitudes de otro equipo.")
 
         request.status = VacationRequestStatus.REJECTED
         request.rejected_at = datetime.now(timezone.utc)
@@ -235,17 +399,30 @@ class VacationRequestService:
             )
         )
         self.db.flush()
+
+        try:
+            self.notif_service.notify_request_rejected(
+                request_id=str(request.id),
+                employee_id=str(request.employee_id),
+                manager_name=manager.full_name,
+                start_date=request.start_date.strftime("%d/%m/%Y"),
+                end_date=request.end_date.strftime("%d/%m/%Y"),
+                comment=decision_comment,
+            )
+        except Exception:
+            pass
+
         return request
 
     def cancel(self, request_id: str, employee_id: str) -> VacationRequest:
         employee_uuid = UUID(employee_id)
         request = self.request_repo.get_by_id_for_update(request_id)
         if not request:
-            raise ValueError("Request not found")
+            raise ValueError("Solicitud no encontrada.")
         if request.employee_id != employee_uuid:
-            raise PermissionError("Cannot cancel another employee request")
+            raise PermissionError("No puedes cancelar la solicitud de otro empleado.")
         if request.status != VacationRequestStatus.PENDING:
-            raise ValueError("Only pending requests can be cancelled")
+            raise ValueError("Solo se pueden cancelar solicitudes pendientes.")
 
         request.status = VacationRequestStatus.CANCELLED
         request.cancelled_at = datetime.now(timezone.utc)
@@ -260,31 +437,45 @@ class VacationRequestService:
             )
         )
         self.db.flush()
+
+        try:
+            employee = self.user_repo.get_by_id(employee_id)
+            if employee and request.manager_id:
+                self.notif_service.notify_request_cancelled(
+                    request_id=str(request.id),
+                    employee_name=employee.full_name,
+                    manager_id=str(request.manager_id),
+                    start_date=request.start_date.strftime("%d/%m/%Y"),
+                    end_date=request.end_date.strftime("%d/%m/%Y"),
+                )
+        except Exception:
+            pass
+
         return request
 
     def get_my_balance(self, employee_id: str, year: int) -> VacationBalance:
         balance = self.balance_repo.get_by_user_year(employee_id, year)
         if not balance:
-            raise ValueError("Balance not found")
+            raise ValueError(f"No se encontró saldo de vacaciones para el año {year}.")
         return balance
 
     def get_team_policy(self, actor_id: str, target_team_id: str | None = None) -> TeamPolicy:
         actor = self.user_repo.get_by_id(actor_id)
         if not actor:
-            raise ValueError("User not found")
+            raise ValueError("Usuario no encontrado.")
 
         if target_team_id:
             if actor.role != UserRole.ADMIN and str(actor.team_id) != target_team_id:
-                raise PermissionError("Cannot view policy for another team")
+                raise PermissionError("No tienes permisos para ver la política de otro equipo.")
             team_id = target_team_id
         else:
             if not actor.team_id:
-                raise ValueError("User has no assigned team")
+                raise ValueError("No estás asignado a ningún equipo.")
             team_id = str(actor.team_id)
 
         policy = self.policy_repo.get_active_for_date(team_id, self._today())
         if not policy:
-            raise ValueError("Team policy not found")
+            raise ValueError("No hay política de equipo configurada.")
         return policy
 
     def upsert_team_policy(
@@ -298,15 +489,15 @@ class VacationRequestService:
     ) -> TeamPolicy:
         actor = self.user_repo.get_by_id(actor_id)
         if not actor:
-            raise ValueError("User not found")
+            raise ValueError("Usuario no encontrado.")
         if actor.role == UserRole.EMPLOYEE:
-            raise PermissionError("Only manager/admin can update team policy")
+            raise PermissionError("Solo managers y administradores pueden actualizar políticas de equipo.")
         if actor.role == UserRole.MANAGER and str(actor.team_id) != team_id:
-            raise PermissionError("Manager can only update own team policy")
+            raise PermissionError("Solo puedes actualizar la política de tu propio equipo.")
         if not self.team_repo.get_by_id(team_id):
-            raise ValueError("Team not found")
+            raise ValueError("Equipo no encontrado.")
         if effective_to and effective_to < effective_from:
-            raise ValueError("Invalid policy effective date range")
+            raise ValueError("La fecha de vigencia final no puede ser anterior a la fecha de inicio.")
 
         policy = TeamPolicy(
             team_id=team_id,
@@ -346,7 +537,7 @@ class VacationRequestService:
 
         new_available = balance.available_days + days_delta
         if new_available < 0:
-            raise ValueError("Adjustment would leave negative balance")
+            raise ValueError("El ajuste dejaría un saldo negativo. Saldo actual: " + str(self._to_float(balance.available_days)) + " días.")
 
         balance.available_days = new_available
         balance.version += 1
