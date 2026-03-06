@@ -1,7 +1,9 @@
+import io
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles
@@ -22,6 +24,7 @@ from app.schemas.auth import UserSummary
 from app.schemas.vacation_balance import BalanceAdjustmentIn, VacationBalanceOut
 from app.mappers.vacation_request_mapper import vacation_request_to_out as _req_to_out, vacation_request_to_out_enriched as _req_to_out_enriched
 from app.schemas.vacation_request import VacationRequestList, VacationRequestOut
+from app.services.reports_service import ReportsService
 from app.services.vacation_request_service import VacationRequestService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -162,4 +165,66 @@ def adjust_balance(
         year=balance.year,
         available_days=float(balance.available_days),
         used_days=float(balance.used_days),
+    )
+
+
+# ── Rollover ────────────────────────────────────────────────────────
+@router.post("/rollover")
+def trigger_rollover(
+    from_year: int = Query(...),
+    max_carryover_days: float = Query(default=10),
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("ADMIN")),
+):
+    service = VacationRequestService(db)
+    try:
+        results = service.rollover_year(
+            admin_id=current_user.id,
+            from_year=from_year,
+            max_carryover_days=Decimal(str(max_carryover_days)),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    db.commit()
+    return {
+        "rolledOver": len(results),
+        "fromYear": from_year,
+        "toYear": from_year + 1,
+    }
+
+
+# ── Reports (CSV) ──────────────────────────────────────────────────
+@router.get("/reports/requests")
+def export_requests_report(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("ADMIN", "HR")),
+) -> StreamingResponse:
+    service = ReportsService(db)
+    csv_content = service.generate_requests_csv(start_date, end_date)
+    return StreamingResponse(
+        io.StringIO(csv_content),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=reporte_solicitudes_{start_date}_{end_date}.csv"
+        },
+    )
+
+
+@router.get("/reports/balances")
+def export_balances_report(
+    year: int = Query(...),
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("ADMIN", "HR")),
+) -> StreamingResponse:
+    service = ReportsService(db)
+    csv_content = service.generate_balances_csv(year)
+    return StreamingResponse(
+        io.StringIO(csv_content),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename=reporte_balances_{year}.csv"
+        },
     )

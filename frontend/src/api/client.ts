@@ -37,6 +37,11 @@ export const api = {
     requests: { list: impl.listAllRequests },
     balances: { list: impl.listAllBalances },
     teams: { list: impl.listTeams },
+    rollover: impl.triggerRollover,
+  },
+  reports: {
+    exportRequests: impl.exportRequestsReport,
+    exportBalances: impl.exportBalancesReport,
   },
   manager: {
     teamMembers: impl.listTeamMembers,

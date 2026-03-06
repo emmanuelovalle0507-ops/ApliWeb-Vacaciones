@@ -12,9 +12,13 @@ import Select from "@/components/ui/Select";
 import RequestsTable from "@/components/vacations/RequestsTable";
 import { RequestFiltersBar, UserFiltersBar } from "@/components/vacations/Filters";
 import AIChatPanel from "@/components/ai/AIChatPanel";
+import { useToast } from "@/components/ui/Toast";
+import ExportBar from "@/components/reports/ExportBar";
+import { downloadCSV, printAsPDF } from "@/lib/export";
 
 export default function HRDashboardPage() {
   const currentYear = new Date().getFullYear();
+  const { toast } = useToast();
 
   // ── Users tab state ──
   const [userRole, setUserRole] = useState("");
@@ -29,6 +33,9 @@ export default function HRDashboardPage() {
 
   // ── Balances tab state ──
   const [balYear, setBalYear] = useState(currentYear);
+
+  // ── Export state ──
+  const [exporting, setExporting] = useState(false);
 
   // ── Queries ──
   const teamsQ = useQuery({
@@ -63,6 +70,34 @@ export default function HRDashboardPage() {
     queryKey: ["admin.balances", balYear],
     queryFn: () => api.admin.balances.list(balYear),
   });
+
+  // ── Export handlers ──
+  const handleExportRequestsCSV = async () => {
+    setExporting(true);
+    try {
+      const csv = await api.reports.exportRequests(
+        reqStart || `${currentYear}-01-01`,
+        reqEnd || `${currentYear}-12-31`
+      );
+      downloadCSV(csv, `solicitudes_${reqStart || currentYear}.csv`);
+    } catch {
+      toast("error", "Error al exportar solicitudes");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportBalancesCSV = async () => {
+    setExporting(true);
+    try {
+      const csv = await api.reports.exportBalances(balYear);
+      downloadCSV(csv, `balances_${balYear}.csv`);
+    } catch {
+      toast("error", "Error al exportar balances");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // ── Column defs ──
   const userColumns: Column<(typeof usersQ.data extends (infer U)[] | undefined ? U : never)>[] = [
@@ -111,17 +146,24 @@ export default function HRDashboardPage() {
       label: "Solicitudes",
       content: (
         <div className="space-y-4">
-          <RequestFiltersBar
-            status={reqStatus}
-            areaId={reqArea}
-            startDate={reqStart}
-            endDate={reqEnd}
-            areas={areas}
-            onStatusChange={setReqStatus}
-            onAreaChange={setReqArea}
-            onStartDateChange={setReqStart}
-            onEndDateChange={setReqEnd}
-          />
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <RequestFiltersBar
+              status={reqStatus}
+              areaId={reqArea}
+              startDate={reqStart}
+              endDate={reqEnd}
+              areas={areas}
+              onStatusChange={setReqStatus}
+              onAreaChange={setReqArea}
+              onStartDateChange={setReqStart}
+              onEndDateChange={setReqEnd}
+            />
+            <ExportBar
+              onExportCSV={handleExportRequestsCSV}
+              onPrintPDF={printAsPDF}
+              loading={exporting}
+            />
+          </div>
           {/* HR is read-only: no action buttons */}
           <RequestsTable
             data={requestsQ.data ?? []}
@@ -138,12 +180,19 @@ export default function HRDashboardPage() {
       label: "Balances",
       content: (
         <div className="space-y-4">
-          <div className="w-40">
-            <Select
-              label="Año"
-              value={String(balYear)}
-              onChange={(e) => setBalYear(Number(e.target.value))}
-              options={yearOptions}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div className="w-40">
+              <Select
+                label="Año"
+                value={String(balYear)}
+                onChange={(e) => setBalYear(Number(e.target.value))}
+                options={yearOptions}
+              />
+            </div>
+            <ExportBar
+              onExportCSV={handleExportBalancesCSV}
+              onPrintPDF={printAsPDF}
+              loading={exporting}
             />
           </div>
           <Table columns={balanceColumns} data={(balancesQ.data ?? []) as BalanceRow[]} isLoading={balancesQ.isLoading} isError={balancesQ.isError} errorMessage="Error al cargar balances." onRetry={() => void balancesQ.refetch()} emptyMessage="No hay balances para este año." />

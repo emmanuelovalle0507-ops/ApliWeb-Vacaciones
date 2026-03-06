@@ -11,6 +11,7 @@ import Table, { type Column } from "@/components/ui/Table";
 import { StatusBadge, RoleBadge } from "@/components/ui/Badge";
 import Select from "@/components/ui/Select";
 import Input from "@/components/ui/Input";
+import Button from "@/components/ui/Button";
 import RequestsTable from "@/components/vacations/RequestsTable";
 import ApprovalModal from "@/components/vacations/ApprovalModal";
 import { RequestFiltersBar, UserFiltersBar } from "@/components/vacations/Filters";
@@ -18,6 +19,8 @@ import { formatDate } from "@/lib/format";
 import type { VacationBalance } from "@/types";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import { useToast } from "@/components/ui/Toast";
+import ExportBar from "@/components/reports/ExportBar";
+import { downloadCSV, printAsPDF } from "@/lib/export";
 
 type ModalAction = "approve" | "reject";
 
@@ -45,6 +48,9 @@ export default function AdminDashboardPage() {
   const [selectedReq, setSelectedReq] = useState<VacationRequest | null>(null);
   const [modalAction, setModalAction] = useState<ModalAction>("approve");
   const [modalOpen, setModalOpen] = useState(false);
+
+  // ── Export state ──
+  const [exporting, setExporting] = useState(false);
 
   // ── Queries ──
   const teamsQ = useQuery({
@@ -109,6 +115,17 @@ export default function AdminDashboardPage() {
     },
   });
 
+  const rolloverMut = useMutation({
+    mutationFn: () => api.admin.rollover(balYear),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["admin.balances"] });
+      toast("success", `Rollover completado: ${data.rolledOver} balances actualizados (${data.fromYear} → ${data.toYear})`);
+    },
+    onError: (err) => {
+      toast("error", err instanceof Error ? err.message : "Error en rollover");
+    },
+  });
+
   const openModal = (req: VacationRequest, action: ModalAction) => {
     setSelectedReq(req);
     setModalAction(action);
@@ -120,6 +137,34 @@ export default function AdminDashboardPage() {
       await approveMut.mutateAsync({ id: requestId, comment });
     } else {
       await rejectMut.mutateAsync({ id: requestId, comment });
+    }
+  };
+
+  // ── Export handlers ──
+  const handleExportRequestsCSV = async () => {
+    setExporting(true);
+    try {
+      const csv = await api.reports.exportRequests(
+        reqStart || `${currentYear}-01-01`,
+        reqEnd || `${currentYear}-12-31`
+      );
+      downloadCSV(csv, `solicitudes_${reqStart || currentYear}.csv`);
+    } catch {
+      toast("error", "Error al exportar solicitudes");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportBalancesCSV = async () => {
+    setExporting(true);
+    try {
+      const csv = await api.reports.exportBalances(balYear);
+      downloadCSV(csv, `balances_${balYear}.csv`);
+    } catch {
+      toast("error", "Error al exportar balances");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -170,17 +215,24 @@ export default function AdminDashboardPage() {
       label: "Solicitudes",
       content: (
         <div className="space-y-4">
-          <RequestFiltersBar
-            status={reqStatus}
-            areaId={reqArea}
-            startDate={reqStart}
-            endDate={reqEnd}
-            areas={areas}
-            onStatusChange={setReqStatus}
-            onAreaChange={setReqArea}
-            onStartDateChange={setReqStart}
-            onEndDateChange={setReqEnd}
-          />
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <RequestFiltersBar
+              status={reqStatus}
+              areaId={reqArea}
+              startDate={reqStart}
+              endDate={reqEnd}
+              areas={areas}
+              onStatusChange={setReqStatus}
+              onAreaChange={setReqArea}
+              onStartDateChange={setReqStart}
+              onEndDateChange={setReqEnd}
+            />
+            <ExportBar
+              onExportCSV={handleExportRequestsCSV}
+              onPrintPDF={printAsPDF}
+              loading={exporting}
+            />
+          </div>
           <RequestsTable
             data={requestsQ.data ?? []}
             isLoading={requestsQ.isLoading}
@@ -198,13 +250,30 @@ export default function AdminDashboardPage() {
       label: "Balances",
       content: (
         <div className="space-y-4">
-          <div className="w-40">
-            <Select
-              label="Año"
-              value={String(balYear)}
-              onChange={(e) => setBalYear(Number(e.target.value))}
-              options={yearOptions}
-            />
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div className="w-40">
+              <Select
+                label="Año"
+                value={String(balYear)}
+                onChange={(e) => setBalYear(Number(e.target.value))}
+                options={yearOptions}
+              />
+            </div>
+            <div className="flex gap-2 items-end">
+              <ExportBar
+                onExportCSV={handleExportBalancesCSV}
+                onPrintPDF={printAsPDF}
+                loading={exporting}
+              />
+              <Button
+                variant="success"
+                size="sm"
+                onClick={() => rolloverMut.mutate()}
+                loading={rolloverMut.isPending}
+              >
+                Rollover {balYear} → {balYear + 1}
+              </Button>
+            </div>
           </div>
           <Table columns={balanceColumns} data={(balancesQ.data ?? []) as BalanceRow[]} isLoading={balancesQ.isLoading} isError={balancesQ.isError} errorMessage="Error al cargar balances." onRetry={() => void balancesQ.refetch()} emptyMessage="No hay balances para este año." />
         </div>

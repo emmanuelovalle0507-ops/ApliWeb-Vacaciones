@@ -165,6 +165,12 @@ export interface RequestFilters {
   endDate?: string;
 }
 
+export interface RolloverResult {
+  rolledOver: number;
+  fromYear: number;
+  toYear: number;
+}
+
 // ── Navigation ─────────────────────────────────────────
 export interface NavItem {
   label: string;

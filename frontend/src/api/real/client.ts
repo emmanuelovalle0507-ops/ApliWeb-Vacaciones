@@ -16,6 +16,7 @@ import type {
   CreateRequestPayload,
   UserFilters,
   RequestFilters,
+  RolloverResult,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
@@ -493,4 +494,39 @@ export async function runTeamPolicyAgent(
     message: result.message,
     policy: result.policy ? mapTeamPolicy(result.policy) : null,
   };
+}
+
+// ── Day Rollover ──────────────────────────────────────
+export async function triggerRollover(
+  fromYear: number,
+  maxCarryoverDays: number = 10
+): Promise<RolloverResult> {
+  return request<RolloverResult>(
+    `/admin/rollover?from_year=${fromYear}&max_carryover_days=${maxCarryoverDays}`,
+    { method: "POST" }
+  );
+}
+
+// ── Reports (CSV) ─────────────────────────────────────
+export async function exportRequestsReport(
+  startDate: string,
+  endDate: string
+): Promise<string> {
+  const token = getToken();
+  const res = await fetch(
+    `${BASE_URL}/admin/reports/requests?start_date=${startDate}&end_date=${endDate}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+  );
+  if (!res.ok) throw new Error("Error al generar reporte de solicitudes");
+  return res.text();
+}
+
+export async function exportBalancesReport(year: number): Promise<string> {
+  const token = getToken();
+  const res = await fetch(
+    `${BASE_URL}/admin/reports/balances?year=${year}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+  );
+  if (!res.ok) throw new Error("Error al generar reporte de balances");
+  return res.text();
 }

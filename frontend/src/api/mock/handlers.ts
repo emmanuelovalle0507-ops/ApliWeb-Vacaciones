@@ -13,6 +13,7 @@ import type {
   CreateRequestPayload,
   UserFilters,
   RequestFilters,
+  RolloverResult,
 } from "@/types";
 import { businessDaysBetween } from "@/lib/dates";
 import * as db from "./db";
@@ -400,4 +401,68 @@ export async function runTeamPolicyAgent(
         }
       : null,
   };
+}
+
+// ── Day Rollover ──────────────────────────────────────
+export async function triggerRollover(
+  fromYear: number,
+  maxCarryoverDays: number = 10
+): Promise<RolloverResult> {
+  await delay(500);
+  const toYear = fromYear + 1;
+  const oldBalances = db.listBalances(fromYear);
+  let count = 0;
+
+  for (const oldBal of oldBalances) {
+    const carry = Math.min(oldBal.availableDays, maxCarryoverDays);
+    if (carry <= 0) continue;
+
+    const existing = db.getBalance(oldBal.userId, toYear);
+    if (existing) {
+      db.updateBalance(oldBal.userId, toYear, {
+        carriedOverDays: carry,
+        availableDays: existing.availableDays + carry,
+      });
+    } else {
+      db.upsertBalance({
+        userId: oldBal.userId,
+        year: toYear,
+        grantedDays: 15,
+        carriedOverDays: carry,
+        usedDays: 0,
+        availableDays: 15 + carry,
+      });
+    }
+    count++;
+  }
+
+  return { rolledOver: count, fromYear, toYear };
+}
+
+// ── Reports (CSV) ─────────────────────────────────────
+export async function exportRequestsReport(
+  startDate: string,
+  endDate: string
+): Promise<string> {
+  await delay(300);
+  const allRequests = db.listAllRequests().filter(
+    (r) => r.startDate >= startDate && r.endDate <= endDate
+  );
+  const header = "Empleado,Area,Fecha Inicio,Fecha Fin,Dias,Estado,Comentario";
+  const rows = allRequests.map(
+    (r) =>
+      `"${r.employeeName}","${r.employeeArea}","${r.startDate}","${r.endDate}",${r.requestedBusinessDays},"${r.status}","${r.employeeComment || ""}"`
+  );
+  return [header, ...rows].join("\n");
+}
+
+export async function exportBalancesReport(year: number): Promise<string> {
+  await delay(300);
+  const bals = db.listBalances(year);
+  const header = "Empleado,Area,Año,Otorgados,Arrastrados,Usados,Disponibles";
+  const rows = bals.map((b) => {
+    const user = db.findUserById(b.userId);
+    return `"${user?.fullName ?? "—"}","${user?.area.name ?? "—"}",${b.year},${b.grantedDays},${b.carriedOverDays},${b.usedDays},${b.availableDays}`;
+  });
+  return [header, ...rows].join("\n");
 }

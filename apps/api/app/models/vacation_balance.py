@@ -20,6 +20,7 @@ class VacationBalance(Base):
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     available_days: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)
     used_days: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)
+    carried_over_days: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

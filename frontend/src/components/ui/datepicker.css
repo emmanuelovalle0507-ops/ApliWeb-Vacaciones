@@ -1,0 +1,10 @@
+.rdp-root {
+  --rdp-accent-color: #7c3aed;
+  --rdp-accent-background-color: #ede9fe;
+}
+
+.rdp-root .rdp-disabled {
+  color: #d1d5db !important;
+  text-decoration: line-through;
+  opacity: 0.6;
+}

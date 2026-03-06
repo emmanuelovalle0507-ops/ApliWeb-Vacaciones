@@ -27,6 +27,11 @@ const initialUsers: User[] = [
   { id: "u6", fullName: "Ana Martínez", email: "ana.martinez@empresa.com", role: "EMPLOYEE", area: AREAS[0], managerId: "u3" },
   { id: "u7", fullName: "Jorge Ramírez", email: "jorge.ramirez@empresa.com", role: "EMPLOYEE", area: AREAS[1], managerId: "u4" },
   { id: "u8", fullName: "Sofía Hernández", email: "sofia.hernandez@empresa.com", role: "EMPLOYEE", area: AREAS[1], managerId: "u4" },
+  // Demo bypass users
+  { id: "demo-employee", fullName: "Demo Empleado", email: "demo.employee@vacaciones.local", role: "EMPLOYEE", area: AREAS[0], managerId: "demo-manager" },
+  { id: "demo-manager", fullName: "Demo Manager", email: "demo.manager@vacaciones.local", role: "MANAGER", area: AREAS[0] },
+  { id: "demo-admin", fullName: "Demo Admin", email: "demo.admin@vacaciones.local", role: "ADMIN", area: AREAS[2] },
+  { id: "demo-hr", fullName: "Demo RRHH", email: "demo.hr@vacaciones.local", role: "HR", area: AREAS[2] },
 ];
 
 // ── Balances ───────────────────────────────────────────
@@ -39,6 +44,11 @@ const initialBalances: VacationBalance[] = [
   { userId: "u6", year: CURRENT_YEAR, grantedDays: 15, carriedOverDays: 5, usedDays: 10, availableDays: 10 },
   { userId: "u7", year: CURRENT_YEAR, grantedDays: 15, carriedOverDays: 2, usedDays: 5, availableDays: 12 },
   { userId: "u8", year: CURRENT_YEAR, grantedDays: 15, carriedOverDays: 0, usedDays: 0, availableDays: 15 },
+  // Demo bypass users
+  { userId: "demo-employee", year: CURRENT_YEAR, grantedDays: 15, carriedOverDays: 0, usedDays: 0, availableDays: 15 },
+  { userId: "demo-manager", year: CURRENT_YEAR, grantedDays: 20, carriedOverDays: 0, usedDays: 0, availableDays: 20 },
+  { userId: "demo-admin", year: CURRENT_YEAR, grantedDays: 20, carriedOverDays: 0, usedDays: 0, availableDays: 20 },
+  { userId: "demo-hr", year: CURRENT_YEAR, grantedDays: 20, carriedOverDays: 0, usedDays: 0, availableDays: 20 },
 ];
 
 // ── Requests ───────────────────────────────────────────
@@ -171,6 +181,32 @@ export function updateRequest(id: string, updates: Partial<VacationRequest>): Va
 // ── Notification Queries ───────────────────────────────
 export function listNotificationsByUser(userId: string): NotificationEvent[] {
   return notifications.filter((n) => n.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+// ── Balance Mutations ─────────────────────────────────
+export function upsertBalance(balance: VacationBalance): VacationBalance {
+  const idx = balances.findIndex(
+    (b) => b.userId === balance.userId && b.year === balance.year
+  );
+  if (idx >= 0) {
+    balances[idx] = { ...balance };
+    return balances[idx];
+  }
+  balances.push({ ...balance });
+  return balance;
+}
+
+export function updateBalance(
+  userId: string,
+  year: number,
+  updates: Partial<VacationBalance>
+): VacationBalance | undefined {
+  const idx = balances.findIndex(
+    (b) => b.userId === userId && b.year === year
+  );
+  if (idx === -1) return undefined;
+  balances[idx] = { ...balances[idx], ...updates };
+  return balances[idx];
 }
 
 export function addNotification(n: NotificationEvent): void {

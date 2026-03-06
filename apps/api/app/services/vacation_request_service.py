@@ -10,6 +10,7 @@ from app.models.team_policy import TeamPolicy
 from app.models.user import UserRole
 from app.models.vacation_balance import VacationBalance
 from app.models.vacation_request import VacationRequest, VacationRequestStatus
+from app.core.holidays import is_holiday
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.balance_adjustment_repo import BalanceAdjustmentRepository
 from app.repositories.team_policy_repo import TeamPolicyRepository
@@ -41,7 +42,7 @@ class VacationRequestService:
         count = 0
         current = start_date
         while current <= end_date:
-            if current.weekday() < 5:  # Mon-Fri = 0-4
+            if current.weekday() < 5 and not is_holiday(current):  # Mon-Fri, not holiday
                 count += 1
             current = date.fromordinal(current.toordinal() + 1)
         if count <= 0:
@@ -372,3 +373,55 @@ class VacationRequestService:
         )
         self.db.flush()
         return balance
+
+    def rollover_year(
+        self,
+        admin_id: str,
+        from_year: int,
+        max_carryover_days: Decimal = Decimal("10"),
+    ) -> list[VacationBalance]:
+        """Carry over unused days from from_year to from_year+1 for all users."""
+        admin_uuid = UUID(admin_id)
+        to_year = from_year + 1
+        old_balances = self.balance_repo.list_by_year(from_year)
+        results: list[VacationBalance] = []
+
+        for old_bal in old_balances:
+            unused = old_bal.available_days
+            carry = min(unused, max_carryover_days)
+            if carry <= 0:
+                continue
+
+            new_bal = self.balance_repo.get_by_user_year_for_update(
+                str(old_bal.user_id), to_year
+            )
+            if not new_bal:
+                new_bal = VacationBalance(
+                    user_id=old_bal.user_id,
+                    year=to_year,
+                    available_days=Decimal("0"),
+                    used_days=Decimal("0"),
+                    carried_over_days=Decimal("0"),
+                )
+                new_bal = self.balance_repo.add(new_bal)
+                self.db.flush()
+
+            new_bal.carried_over_days = carry
+            new_bal.available_days += carry
+            new_bal.version += 1
+
+            self.adjustment_repo.add(
+                BalanceAdjustment(
+                    user_id=old_bal.user_id,
+                    request_id=None,
+                    adjustment_type=BalanceAdjustmentType.ADMIN_MANUAL_ADJUST,
+                    days_delta=carry,
+                    performed_by=admin_uuid,
+                    reason=f"Rollover from {from_year}",
+                    operation_key=f"rollover:{old_bal.user_id}:{from_year}:{to_year}",
+                )
+            )
+            results.append(new_bal)
+
+        self.db.flush()
+        return results
