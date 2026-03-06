@@ -39,6 +39,10 @@ export interface User {
   role: UserRole;
   area: Area;
   managerId?: string;
+  managerIds?: string[];
+  isActive?: boolean;
+  hireDate?: string;
+  position?: string;
 }
 
 export interface VacationBalance {
@@ -82,6 +86,7 @@ export interface NotificationEvent {
 export interface AuthResponse {
   token: string;
   user: User;
+  mustChangePassword?: boolean;
 }
 
 export interface AIChatHistoryItem {
@@ -164,6 +169,57 @@ export interface RequestFilters {
   areaId?: string;
   startDate?: string;
   endDate?: string;
+}
+
+// ── Calendar ──────────────────────────────────────────
+export interface CalendarEvent {
+  requestId: string;
+  employeeId: string;
+  employeeName: string;
+  teamId?: string;
+  startDate: string;
+  endDate: string;
+  status: "PENDING" | "APPROVED";
+}
+
+// ── Pagination ────────────────────────────────────────
+export interface PaginationMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  pagination: PaginationMeta;
+}
+
+export interface PaginationParams {
+  page?: number;
+  pageSize?: number;
+}
+
+// ── User Management ───────────────────────────────────
+export interface UserCreatePayload {
+  email: string;
+  fullName: string;
+  role: string;
+  teamId?: string;
+  managerIds: string[];
+  hireDate?: string;
+  position?: string;
+  password: string;
+}
+
+export interface UserUpdatePayload {
+  fullName?: string;
+  role?: string;
+  teamId?: string;
+  managerIds?: string[];
+  hireDate?: string;
+  position?: string;
+  isActive?: boolean;
 }
 
 // ── Navigation ─────────────────────────────────────────

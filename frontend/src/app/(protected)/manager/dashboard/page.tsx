@@ -14,6 +14,7 @@ import ApprovalModal from "@/components/vacations/ApprovalModal";
 import TeamPolicyForm from "@/components/vacations/TeamPolicyForm";
 import TeamPolicyAgentPanel from "@/components/ai/TeamPolicyAgentPanel";
 import AIChatPanel from "@/components/ai/AIChatPanel";
+import VacationCalendar from "@/components/calendar/VacationCalendar";
 import { useToast } from "@/components/ui/Toast";
 
 type ModalAction = "approve" | "reject";
@@ -30,7 +31,10 @@ export default function ManagerDashboardPage() {
 
   const pendingQ = useQuery({
     queryKey: ["pendingApprovals", user?.id],
-    queryFn: () => api.approvals.listPending(user!.id),
+    queryFn: async () => {
+      const res = await api.approvals.listPending(user!.id);
+      return res.items;
+    },
     enabled: !!user,
   });
 
@@ -124,6 +128,11 @@ export default function ManagerDashboardPage() {
           <TeamPolicyAgentPanel title="Configurar Política con IA" />
         </div>
       ),
+    },
+    {
+      id: "calendar",
+      label: "Calendario",
+      content: <VacationCalendar title="Calendario del Equipo" />,
     },
     {
       id: "ai",

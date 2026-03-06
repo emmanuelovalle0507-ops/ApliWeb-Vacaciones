@@ -13,11 +13,28 @@ import type {
   CreateRequestPayload,
   UserFilters,
   RequestFilters,
+  PaginatedResponse,
+  PaginationParams,
+  CalendarEvent,
+  UserCreatePayload,
+  UserUpdatePayload,
 } from "@/types";
 import { businessDaysBetween } from "@/lib/dates";
 import * as db from "./db";
 
 const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms));
+
+function paginate<T>(items: T[], params?: PaginationParams): PaginatedResponse<T> {
+  const page = params?.page ?? 1;
+  const pageSize = params?.pageSize ?? 20;
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const start = (page - 1) * pageSize;
+  return {
+    items: items.slice(start, start + pageSize),
+    pagination: { page, pageSize, total, totalPages },
+  };
+}
 
 // ── Auth ───────────────────────────────────────────────
 export async function login(email: string, _password: string): Promise<AuthResponse> {
@@ -147,9 +164,10 @@ export async function createRequest(
   return req;
 }
 
-export async function listMyRequests(userId: string): Promise<VacationRequest[]> {
+export async function listMyRequests(userId: string, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
   await delay(200);
-  return db.listRequestsByUser(userId);
+  const all = db.listRequestsByUser(userId);
+  return paginate(all, pagination);
 }
 
 export async function cancelRequest(requestId: string, userId: string): Promise<VacationRequest> {
@@ -165,9 +183,10 @@ export async function cancelRequest(requestId: string, userId: string): Promise<
 }
 
 // ── Approvals ──────────────────────────────────────────
-export async function listPending(managerId: string): Promise<VacationRequest[]> {
+export async function listPending(managerId: string, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
   await delay(200);
-  return db.listPendingForManager(managerId);
+  const all = db.listPendingForManager(managerId);
+  return paginate(all, pagination);
 }
 
 export async function approveRequest(
@@ -248,7 +267,7 @@ export async function rejectRequest(
 }
 
 // ── Admin ──────────────────────────────────────────────
-export async function listUsers(filters?: UserFilters): Promise<User[]> {
+export async function listUsers(filters?: UserFilters, pagination?: PaginationParams): Promise<PaginatedResponse<User>> {
   await delay(200);
   let result = db.listUsers();
   if (filters?.role) result = result.filter((u) => u.role === filters.role);
@@ -259,10 +278,10 @@ export async function listUsers(filters?: UserFilters): Promise<User[]> {
       (u) => u.fullName.toLowerCase().includes(s) || u.email.toLowerCase().includes(s)
     );
   }
-  return result;
+  return paginate(result, pagination);
 }
 
-export async function listAllRequests(filters?: RequestFilters): Promise<VacationRequest[]> {
+export async function listAllRequests(filters?: RequestFilters, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
   await delay(200);
   let result = db.listAllRequests();
   if (filters?.status) result = result.filter((r) => r.status === filters.status);
@@ -273,15 +292,16 @@ export async function listAllRequests(filters?: RequestFilters): Promise<Vacatio
   }
   if (filters?.startDate) result = result.filter((r) => r.startDate >= filters.startDate!);
   if (filters?.endDate) result = result.filter((r) => r.endDate <= filters.endDate!);
-  return result;
+  return paginate(result, pagination);
 }
 
-export async function listAllBalances(year: number): Promise<(VacationBalance & { userName: string; userArea: string })[]> {
+export async function listAllBalances(year: number, pagination?: PaginationParams): Promise<PaginatedResponse<VacationBalance & { userName: string; userArea: string }>> {
   await delay(200);
-  return db.listBalances(year).map((b) => {
+  const all = db.listBalances(year).map((b) => {
     const user = db.findUserById(b.userId);
     return { ...b, userName: user?.fullName ?? "—", userArea: user?.area.name ?? "—" };
   });
+  return paginate(all, pagination);
 }
 
 export async function listTeams(): Promise<{ id: string; name: string }[]> {
@@ -294,10 +314,80 @@ export async function listTeamMembers(): Promise<User[]> {
   return db.listUsers().filter((u) => u.role === "EMPLOYEE");
 }
 
-// ── Notifications ──────────────────────────────────────
-export async function listMyNotifications(userId: string): Promise<NotificationEvent[]> {
+// ── User CRUD (mock stubs) ─────────────────────────────
+export async function createUser(payload: UserCreatePayload): Promise<User> {
+  await delay(400);
+  return {
+    id: `mock-${Date.now()}`,
+    fullName: payload.fullName,
+    email: payload.email,
+    role: payload.role as User["role"],
+    area: { id: payload.teamId ?? "no-team", name: "Equipo General" },
+    managerId: payload.managerIds[0],
+    managerIds: payload.managerIds,
+    isActive: true,
+    hireDate: payload.hireDate,
+    position: payload.position,
+  };
+}
+
+export async function updateUser(userId: string, payload: UserUpdatePayload): Promise<User> {
+  await delay(300);
+  const user = db.findUserById(userId) ?? db.listUsers()[0];
+  return {
+    ...user,
+    fullName: payload.fullName ?? user.fullName,
+    role: (payload.role as User["role"]) ?? user.role,
+    managerIds: payload.managerIds ?? user.managerIds ?? [],
+    isActive: payload.isActive ?? user.isActive ?? true,
+    hireDate: payload.hireDate ?? user.hireDate,
+    position: payload.position ?? user.position,
+  };
+}
+
+export async function deactivateUser(userId: string): Promise<User> {
+  await delay(300);
+  const user = db.findUserById(userId) ?? db.listUsers()[0];
+  return { ...user, isActive: false };
+}
+
+export async function changePassword(_currentPassword: string, _newPassword: string): Promise<void> {
+  await delay(400);
+}
+
+// ── Calendar ────────────────────────────────────────────
+export async function getCalendarEvents(month: string, _teamId?: string): Promise<CalendarEvent[]> {
   await delay(200);
-  return db.listNotificationsByUser(userId);
+  const allRequests = db.listAllRequests().filter(
+    (r) => r.status === "APPROVED" || r.status === "PENDING"
+  );
+  const [yearStr, monthStr] = month.split("-");
+  const y = parseInt(yearStr, 10);
+  const m = parseInt(monthStr, 10);
+  const monthStart = `${month}-01`;
+  const lastDay = new Date(y, m, 0).getDate();
+  const monthEnd = `${month}-${String(lastDay).padStart(2, "0")}`;
+
+  return allRequests
+    .filter((r) => r.startDate <= monthEnd && r.endDate >= monthStart)
+    .map((r) => ({
+      requestId: r.id,
+      employeeId: r.userId,
+      employeeName: r.employeeName,
+      teamId: undefined,
+      startDate: r.startDate,
+      endDate: r.endDate,
+      status: r.status as CalendarEvent["status"],
+    }));
+}
+
+// ── Notifications ──────────────────────────────────────
+export async function listMyNotifications(userId: string, pagination?: PaginationParams): Promise<PaginatedResponse<NotificationEvent> & { unreadCount: number }> {
+  await delay(200);
+  const all = db.listNotificationsByUser(userId);
+  const unreadCount = db.countUnreadByUser(userId);
+  const paged = paginate(all, pagination);
+  return { ...paged, unreadCount };
 }
 
 export async function getUnreadCount(): Promise<number> {

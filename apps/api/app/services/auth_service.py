@@ -1,5 +1,5 @@
 from app.core.config import settings
-from app.core.security import create_access_token, verify_password
+from app.core.security import create_access_token, hash_password, verify_password
 from app.repositories.team_repo import TeamRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.auth import TokenResponse, UserSummary
@@ -32,6 +32,7 @@ class AuthService:
                 role=user.role.value,
                 team_id=str(user.team_id) if user.team_id else None,
                 team_name=team_name,
+                must_change_password=user.must_change_password,
             ),
         )
 
@@ -51,4 +52,14 @@ class AuthService:
             role=user.role.value,
             team_id=str(user.team_id) if user.team_id else None,
             team_name=team_name,
+            must_change_password=user.must_change_password,
         )
+
+    def change_password(self, user_id: str, current_password: str, new_password: str) -> None:
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            raise ValueError("Usuario no encontrado.")
+        if not verify_password(current_password, user.password_hash):
+            raise ValueError("La contraseña actual es incorrecta.")
+        user.password_hash = hash_password(new_password)
+        user.must_change_password = False
