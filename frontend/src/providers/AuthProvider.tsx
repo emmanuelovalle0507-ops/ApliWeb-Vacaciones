@@ -83,7 +83,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await api.auth.login(email, password);
       setSession(res.token, res.user);
       setUser(res.user);
-      router.push(dashboardPathForRole(res.user.role));
+      if (res.mustChangePassword) {
+        router.push("/change-password");
+      } else {
+        router.push(dashboardPathForRole(res.user.role));
+      }
     },
     [router, queryClient]
   );

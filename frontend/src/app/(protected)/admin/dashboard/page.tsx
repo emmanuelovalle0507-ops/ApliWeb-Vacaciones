@@ -62,28 +62,35 @@ export default function AdminDashboardPage() {
 
   const usersQ = useQuery({
     queryKey: ["admin.users", userRole, userArea, userSearch],
-    queryFn: () =>
-      api.admin.users.list({
+    queryFn: async () => {
+      const res = await api.admin.users.list({
         role: (userRole as UserRole) || undefined,
         areaId: userArea || undefined,
         search: userSearch || undefined,
-      }),
+      });
+      return res.items;
+    },
   });
 
   const requestsQ = useQuery({
     queryKey: ["admin.requests", reqStatus, reqArea, reqStart, reqEnd],
-    queryFn: () =>
-      api.admin.requests.list({
+    queryFn: async () => {
+      const res = await api.admin.requests.list({
         status: (reqStatus as RequestStatus) || undefined,
         areaId: reqArea || undefined,
         startDate: reqStart || undefined,
         endDate: reqEnd || undefined,
-      }),
+      });
+      return res.items;
+    },
   });
 
   const balancesQ = useQuery({
     queryKey: ["admin.balances", balYear],
-    queryFn: () => api.admin.balances.list(balYear),
+    queryFn: async () => {
+      const res = await api.admin.balances.list(balYear);
+      return res.items;
+    },
   });
 
   // ── Mutations ──

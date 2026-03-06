@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select, Select
 from sqlalchemy.orm import Session
 
 from app.models.vacation_balance import VacationBalance
@@ -33,3 +33,17 @@ class VacationBalanceRepository:
             .order_by(VacationBalance.user_id)
         )
         return list(self.db.execute(stmt).scalars().all())
+
+    def list_by_year_paginated(self, year: int, *, offset: int = 0, limit: int = 20) -> tuple[list[VacationBalance], int]:
+        base = select(VacationBalance).where(VacationBalance.year == year)
+        total = self._count(base)
+        items = list(
+            self.db.execute(
+                base.order_by(VacationBalance.user_id).offset(offset).limit(limit)
+            ).scalars().all()
+        )
+        return items, total
+
+    def _count(self, base_stmt: Select) -> int:
+        count_stmt = select(func.count()).select_from(base_stmt.subquery())
+        return self.db.execute(count_stmt).scalar_one()

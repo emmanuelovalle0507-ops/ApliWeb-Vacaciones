@@ -83,7 +83,10 @@ export default function NotificationPanel() {
   // Fetch full list only when panel is open
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ["notifications", "list"],
-    queryFn: () => api.notifications.listMine(""),
+    queryFn: async () => {
+      const res = await api.notifications.listMine("");
+      return res.items;
+    },
     enabled: open,
     refetchInterval: open ? 15_000 : false,
   });

@@ -15,6 +15,7 @@ export const api = {
   auth: {
     login: impl.login,
     logout: impl.logout,
+    changePassword: impl.changePassword,
   },
   me: {
     get: impl.getMe,
@@ -34,7 +35,12 @@ export const api = {
     reject: impl.rejectRequest,
   },
   admin: {
-    users: { list: impl.listUsers },
+    users: {
+      list: impl.listUsers,
+      create: impl.createUser,
+      update: impl.updateUser,
+      deactivate: impl.deactivateUser,
+    },
     requests: { list: impl.listAllRequests },
     balances: { list: impl.listAllBalances },
     teams: { list: impl.listTeams },
@@ -52,6 +58,9 @@ export const api = {
     getUnreadCount: impl.getUnreadCount,
     markRead: impl.markNotificationRead,
     markAllRead: impl.markAllNotificationsRead,
+  },
+  calendar: {
+    getEvents: impl.getCalendarEvents,
   },
   ai: {
     ask: impl.askAIChat,

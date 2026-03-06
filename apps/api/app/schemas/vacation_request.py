@@ -2,6 +2,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.pagination import PaginationMeta
+
 
 class VacationRequestCreate(BaseModel):
     start_date: date
@@ -40,6 +42,11 @@ class VacationApprovalResponse(BaseModel):
 
 class VacationRequestList(BaseModel):
     items: list[VacationRequestOut] = Field(default_factory=list)
+
+
+class PaginatedVacationRequestList(BaseModel):
+    items: list[VacationRequestOut] = Field(default_factory=list)
+    pagination: PaginationMeta
 
 
 class PreValidateRequest(BaseModel):

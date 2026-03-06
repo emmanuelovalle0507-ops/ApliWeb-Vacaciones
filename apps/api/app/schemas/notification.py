@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.pagination import PaginationMeta
+
 
 class NotificationOut(BaseModel):
     id: str
@@ -18,6 +20,12 @@ class NotificationOut(BaseModel):
 class NotificationList(BaseModel):
     items: list[NotificationOut] = Field(default_factory=list)
     unread_count: int = 0
+
+
+class PaginatedNotificationList(BaseModel):
+    items: list[NotificationOut] = Field(default_factory=list)
+    unread_count: int = 0
+    pagination: PaginationMeta
 
 
 class NotificationCountOut(BaseModel):
