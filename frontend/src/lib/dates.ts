@@ -1,8 +1,6 @@
-import { isHoliday } from "./holidays";
-
 /**
  * Calculate business days between two dates (inclusive).
- * Excludes Saturdays, Sundays, and Mexican public holidays.
+ * Excludes Saturdays and Sundays. Does NOT consider holidays.
  */
 export function businessDaysBetween(startDate: string, endDate: string): number {
   const start = new Date(startDate + "T00:00:00");
@@ -16,11 +14,7 @@ export function businessDaysBetween(startDate: string, endDate: string): number 
 
   while (current <= end) {
     const day = current.getDay();
-    const yyyy = current.getFullYear();
-    const mm = String(current.getMonth() + 1).padStart(2, "0");
-    const dd = String(current.getDate()).padStart(2, "0");
-    const dateStr = `${yyyy}-${mm}-${dd}`;
-    if (day !== 0 && day !== 6 && !isHoliday(dateStr)) count++;
+    if (day !== 0 && day !== 6) count++;
     current.setDate(current.getDate() + 1);
   }
 

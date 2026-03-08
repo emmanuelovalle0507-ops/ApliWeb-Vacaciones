@@ -30,6 +30,7 @@ from app.db.session import SessionLocal
 from app.models.team import Team
 from app.models.team_policy import TeamPolicy
 from app.models.user import User, UserRole
+from app.models.user_manager import UserManager  # noqa: F401 – needed for relationship resolution
 from app.models.vacation_balance import VacationBalance
 
 
@@ -149,117 +150,175 @@ def _ensure_team_policy(
 
 
 def run() -> None:
-    print("[seed] Iniciando seed MVP...")
+    print("[seed] Iniciando seed para presentación...")
     with SessionLocal() as db:
         with db.begin():
-            team = _ensure_team(db, name="Equipo General")
+            # ── Equipos ──
+            team_ia = _ensure_team(db, name="Desarrollo de IA")
+            team_mkt = _ensure_team(db, name="Marketing Digital")
+            team_ops = _ensure_team(db, name="Operaciones")
 
+            # ── ADMIN ──
             admin = _ensure_user(
                 db,
-                email="admin@vacaciones.local",
-                full_name="Admin Principal",
+                email="RicardoB@seekop.com",
+                full_name="Ricardo Seekop",
                 role=UserRole.ADMIN,
-                password_plain="Admin123!",
-                team_id=team.id,
+                password_plain="Seekop2026!",
+                team_id=team_ia.id,
             )
 
-            manager = _ensure_user(
+            # ── MANAGERS ──
+            josue = _ensure_user(
                 db,
-                email="manager@vacaciones.local",
-                full_name="Manager Equipo",
+                email="JosueO@seekop.com",
+                full_name="Josue Ovalle",
                 role=UserRole.MANAGER,
-                password_plain="Manager123!",
-                team_id=team.id,
+                password_plain="Seekop2026!",
+                team_id=team_ia.id,
                 manager_id=admin.id,
             )
 
-            employee = _ensure_user(
+            daniela = _ensure_user(
                 db,
-                email="employee@vacaciones.local",
-                full_name="Empleado Demo",
+                email="DanielaR@seekop.com",
+                full_name="Daniela Ríos",
+                role=UserRole.MANAGER,
+                password_plain="Seekop2026!",
+                team_id=team_mkt.id,
+                manager_id=admin.id,
+            )
+
+            andres = _ensure_user(
+                db,
+                email="AndresM@seekop.com",
+                full_name="Andrés Mendoza",
+                role=UserRole.MANAGER,
+                password_plain="Seekop2026!",
+                team_id=team_ops.id,
+                manager_id=admin.id,
+            )
+
+            # ── EMPLEADOS — Desarrollo de IA (jefe: Josue) ──
+            ricardo_n = _ensure_user(
+                db,
+                email="RicardoN@seekop.com",
+                full_name="Ricardo Nieto",
                 role=UserRole.EMPLOYEE,
-                password_plain="Employee123!",
-                team_id=team.id,
-                manager_id=manager.id,
-            )
-
-            _ensure_team_policy(
-                db,
-                team_id=team.id,
-                created_by=admin.id,
-                max_people_off_per_day=2,
-                min_notice_days=10,
-            )
-
-            _ensure_balance(
-                db,
-                user_id=employee.id,
-                year=SEED_YEAR,
-                available_days=Decimal("15.00"),
-                used_days=Decimal("0.00"),
+                password_plain="Seekop2026!",
+                team_id=team_ia.id,
+                manager_id=josue.id,
             )
 
             emmanuel = _ensure_user(
                 db,
-                email="emmanuel@seekop.com",
-                full_name="Emmanuel Seekop",
+                email="EmmanuelS@seekop.com",
+                full_name="Emmanuel Salas",
                 role=UserRole.EMPLOYEE,
-                password_plain="1234",
-                team_id=team.id,
-                manager_id=manager.id,
+                password_plain="Seekop2026!",
+                team_id=team_ia.id,
+                manager_id=josue.id,
             )
 
-            ricardo = _ensure_user(
+            # ── EMPLEADOS — Marketing Digital (jefa: Daniela) ──
+            sofia = _ensure_user(
                 db,
-                email="ricardo@seekop.com",
-                full_name="Ricardo Seekop",
+                email="SofiaV@seekop.com",
+                full_name="Sofía Vargas",
                 role=UserRole.EMPLOYEE,
-                password_plain="1234",
-                team_id=team.id,
-                manager_id=manager.id,
+                password_plain="Seekop2026!",
+                team_id=team_mkt.id,
+                manager_id=daniela.id,
             )
 
-            _ensure_balance(
+            carlos = _ensure_user(
                 db,
-                user_id=emmanuel.id,
-                year=SEED_YEAR,
-                available_days=Decimal("15.00"),
-                used_days=Decimal("0.00"),
+                email="CarlosL@seekop.com",
+                full_name="Carlos López",
+                role=UserRole.EMPLOYEE,
+                password_plain="Seekop2026!",
+                team_id=team_mkt.id,
+                manager_id=daniela.id,
             )
 
-            _ensure_balance(
+            # ── EMPLEADOS — Operaciones (jefe: Andrés) ──
+            maria = _ensure_user(
                 db,
-                user_id=ricardo.id,
-                year=SEED_YEAR,
-                available_days=Decimal("15.00"),
-                used_days=Decimal("0.00"),
+                email="MariaG@seekop.com",
+                full_name="María García",
+                role=UserRole.EMPLOYEE,
+                password_plain="Seekop2026!",
+                team_id=team_ops.id,
+                manager_id=andres.id,
             )
 
+            pedro = _ensure_user(
+                db,
+                email="PedroH@seekop.com",
+                full_name="Pedro Hernández",
+                role=UserRole.EMPLOYEE,
+                password_plain="Seekop2026!",
+                team_id=team_ops.id,
+                manager_id=andres.id,
+            )
+
+            # ── HR ──
             hr_user = _ensure_user(
                 db,
-                email="hr@seekop.com",
-                full_name="RRHH Seekop",
+                email="MonicaT@seekop.com",
+                full_name="Mónica Torres",
                 role=UserRole.HR,
-                password_plain="1234",
-                team_id=team.id,
+                password_plain="Seekop2026!",
+                team_id=team_ia.id,
             )
 
-            _ensure_balance(
-                db,
-                user_id=manager.id,
-                year=SEED_YEAR,
-                available_days=Decimal("15.00"),
-                used_days=Decimal("0.00"),
-            )
+            # ── Políticas de equipo ──
+            _ensure_team_policy(db, team_id=team_ia.id, created_by=admin.id, max_people_off_per_day=2, min_notice_days=10)
+            _ensure_team_policy(db, team_id=team_mkt.id, created_by=admin.id, max_people_off_per_day=1, min_notice_days=7)
+            _ensure_team_policy(db, team_id=team_ops.id, created_by=admin.id, max_people_off_per_day=2, min_notice_days=5)
 
-    print("[seed] Seed MVP completado.")
-    print("[seed] Credenciales de prueba:")
-    print("  - admin@vacaciones.local / Admin123!")
-    print("  - manager@vacaciones.local / Manager123!")
-    print("  - employee@vacaciones.local / Employee123!")
-    print("  - emmanuel@seekop.com / 1234")
-    print("  - ricardo@seekop.com / 1234")
-    print("  - hr@seekop.com / 1234 (HR read-only)")
+            # ── Balances ──
+            all_users_with_balance = [
+                (admin, Decimal("20.00"), Decimal("2.00")),
+                (josue, Decimal("18.00"), Decimal("3.00")),
+                (daniela, Decimal("18.00"), Decimal("5.00")),
+                (andres, Decimal("18.00"), Decimal("0.00")),
+                (ricardo_n, Decimal("15.00"), Decimal("4.00")),
+                (emmanuel, Decimal("15.00"), Decimal("2.00")),
+                (sofia, Decimal("15.00"), Decimal("6.00")),
+                (carlos, Decimal("15.00"), Decimal("0.00")),
+                (maria, Decimal("15.00"), Decimal("3.00")),
+                (pedro, Decimal("15.00"), Decimal("1.00")),
+                (hr_user, Decimal("15.00"), Decimal("0.00")),
+            ]
+            for user, available, used in all_users_with_balance:
+                _ensure_balance(db, user_id=user.id, year=SEED_YEAR, available_days=available, used_days=used)
+
+    print()
+    print("[seed] Seed completado OK.")
+    print()
+    print("[seed] ╔══════════════════════════════════════════════════════════════╗")
+    print("[seed] ║          CREDENCIALES PARA PRESENTACIÓN                     ║")
+    print("[seed] ║  (Todos usan contraseña: Seekop2026!)                       ║")
+    print("[seed] ╠══════════════════════════════════════════════════════════════╣")
+    print("[seed] ║  ADMIN                                                      ║")
+    print("[seed] ║    RicardoB@seekop.com      Ricardo Seekop                  ║")
+    print("[seed] ║  MANAGERS                                                   ║")
+    print("[seed] ║    JosueO@seekop.com        Josue Ovalle (Desarrollo IA)    ║")
+    print("[seed] ║    DanielaR@seekop.com      Daniela Ríos (Marketing)        ║")
+    print("[seed] ║    AndresM@seekop.com       Andrés Mendoza (Operaciones)    ║")
+    print("[seed] ║  EMPLEADOS — Desarrollo de IA                               ║")
+    print("[seed] ║    RicardoN@seekop.com      Ricardo Nieto                   ║")
+    print("[seed] ║    EmmanuelS@seekop.com     Emmanuel Salas                  ║")
+    print("[seed] ║  EMPLEADOS — Marketing Digital                              ║")
+    print("[seed] ║    SofiaV@seekop.com        Sofía Vargas                    ║")
+    print("[seed] ║    CarlosL@seekop.com       Carlos López                    ║")
+    print("[seed] ║  EMPLEADOS — Operaciones                                    ║")
+    print("[seed] ║    MariaG@seekop.com        María García                    ║")
+    print("[seed] ║    PedroH@seekop.com        Pedro Hernández                 ║")
+    print("[seed] ║  HR                                                         ║")
+    print("[seed] ║    MonicaT@seekop.com       Mónica Torres                   ║")
+    print("[seed] ╚══════════════════════════════════════════════════════════════╝")
 
 
 if __name__ == "__main__":

@@ -45,6 +45,7 @@ export const api = {
     balances: { list: impl.listAllBalances },
     teams: { list: impl.listTeams },
     rollover: impl.triggerRollover,
+    auditLogs: { list: impl.listAuditLogs },
   },
   reports: {
     exportRequests: impl.exportRequestsReport,
@@ -52,6 +53,7 @@ export const api = {
   },
   manager: {
     teamMembers: impl.listTeamMembers,
+    teamHistory: impl.listTeamHistory,
   },
   notifications: {
     listMine: impl.listMyNotifications,

@@ -228,6 +228,18 @@ export interface UserUpdatePayload {
   isActive?: boolean;
 }
 
+// ── Audit Log ─────────────────────────────────────────
+export interface AuditLogEntry {
+  id: number;
+  actorUserId: string | null;
+  actorName: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
 // ── Navigation ─────────────────────────────────────────
 export interface NavItem {
   label: string;

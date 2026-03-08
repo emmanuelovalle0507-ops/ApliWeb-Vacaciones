@@ -87,6 +87,26 @@ class VacationRequestRepository:
         )
         return items, total
 
+    def list_by_manager_all_paginated(
+        self, manager_id: str, *, status: str | None = None, offset: int = 0, limit: int = 20
+    ) -> tuple[list[VacationRequest], int]:
+        employee_ids = self._employee_ids_for_manager(manager_id)
+        base = select(VacationRequest).where(
+            or_(
+                VacationRequest.manager_id == manager_id,
+                VacationRequest.employee_id.in_(employee_ids),
+            ),
+        )
+        if status:
+            base = base.where(VacationRequest.status == status)
+        total = self._count(base)
+        items = list(
+            self.db.execute(
+                base.order_by(VacationRequest.created_at.desc()).offset(offset).limit(limit)
+            ).scalars().all()
+        )
+        return items, total
+
     def list_all(
         self,
         status: str | None = None,

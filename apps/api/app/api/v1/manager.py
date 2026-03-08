@@ -84,6 +84,23 @@ def reject_request(
     return _to_out_enriched(request, db)
 
 
+@router.get("/vacation-requests/history", response_model=PaginatedVacationRequestList)
+def list_team_history(
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+    pagination: PaginationParams = Depends(),
+) -> PaginatedVacationRequestList:
+    repo = VacationRequestRepository(db)
+    items, total = repo.list_by_manager_all_paginated(
+        str(current_user.id), status=status, offset=pagination.offset, limit=pagination.limit
+    )
+    return PaginatedVacationRequestList(
+        items=[_to_out_enriched(item, db) for item in items],
+        pagination=PaginationMeta.build(page=pagination.page, page_size=pagination.page_size, total=total),
+    )
+
+
 @router.get("/team/members", response_model=UserListOut)
 def list_team_members(
     db: Session = Depends(get_db),

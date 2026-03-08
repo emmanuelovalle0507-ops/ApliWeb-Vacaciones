@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles
 from app.db.session import get_db
+from app.repositories.audit_repo import AuditRepository
 from app.repositories.team_repo import TeamRepository
 from app.repositories.user_repo import UserRepository
 from app.repositories.vacation_balance_repo import VacationBalanceRepository
@@ -32,6 +33,7 @@ from app.schemas.auth import UserSummary
 from app.schemas.pagination import PaginationMeta, PaginationParams
 from app.schemas.vacation_balance import BalanceAdjustmentIn, VacationBalanceOut
 from app.mappers.vacation_request_mapper import vacation_request_to_out as _req_to_out, vacation_request_to_out_enriched as _req_to_out_enriched
+from app.schemas.audit import AuditLogOut, PaginatedAuditLogList
 from app.schemas.vacation_request import PaginatedVacationRequestList, VacationRequestList, VacationRequestOut
 from app.services.reports_service import ReportsService
 from app.services.vacation_request_service import VacationRequestService
@@ -157,6 +159,13 @@ def create_user(
     if payload.manager_ids:
         repo.set_managers(str(user.id), payload.manager_ids)
 
+    AuditRepository(db).log(
+        actor_user_id=current_user.id,
+        action="USER_CREATED",
+        entity_type="user",
+        entity_id=str(user.id),
+        metadata={"email": payload.email, "role": payload.role, "full_name": payload.full_name},
+    )
     db.commit()
 
     # Send welcome email (demo mode logs to console if SMTP not configured)
@@ -219,6 +228,13 @@ def update_user(
         repo.set_managers(user_id, payload.manager_ids)
         user.manager_id = payload.manager_ids[0] if payload.manager_ids else None
 
+    AuditRepository(db).log(
+        actor_user_id=current_user.id,
+        action="USER_UPDATED",
+        entity_type="user",
+        entity_id=user_id,
+        metadata={"changes": payload.model_dump(exclude_none=True)},
+    )
     db.commit()
     db.refresh(user)
     return _user_to_out(user, repo, team_repo)
@@ -244,6 +260,13 @@ def deactivate_user(
             detail="RH no puede desactivar usuarios con rol Administrador.",
         )
     user.is_active = False
+    AuditRepository(db).log(
+        actor_user_id=current_user.id,
+        action="USER_DEACTIVATED",
+        entity_type="user",
+        entity_id=user_id,
+        metadata={"email": user.email, "full_name": user.full_name},
+    )
     db.commit()
     db.refresh(user)
     return _user_to_out(user, repo, team_repo)
@@ -384,6 +407,47 @@ def trigger_rollover(
         "fromYear": from_year,
         "toYear": from_year + 1,
     }
+
+
+# ── Audit Logs ─────────────────────────────────────────────────────
+@router.get("/audit-logs", response_model=PaginatedAuditLogList)
+def list_audit_logs(
+    action: str | None = Query(None),
+    entity_type: str | None = Query(None),
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("ADMIN")),
+    pagination: PaginationParams = Depends(),
+) -> PaginatedAuditLogList:
+    audit_repo = AuditRepository(db)
+    user_repo = UserRepository(db)
+    items, total = audit_repo.list_paginated(
+        action=action, entity_type=entity_type,
+        offset=pagination.offset, limit=pagination.limit,
+    )
+    names_cache: dict[str, str] = {}
+    out_items = []
+    for log in items:
+        actor_name = None
+        if log.actor_user_id:
+            uid = str(log.actor_user_id)
+            if uid not in names_cache:
+                u = user_repo.get_by_id(uid)
+                names_cache[uid] = u.full_name if u else "Usuario eliminado"
+            actor_name = names_cache[uid]
+        out_items.append(AuditLogOut(
+            id=log.id,
+            actor_user_id=str(log.actor_user_id) if log.actor_user_id else None,
+            actor_name=actor_name,
+            action=log.action,
+            entity_type=log.entity_type,
+            entity_id=log.entity_id,
+            metadata=log.metadata_ or {},
+            created_at=log.created_at,
+        ))
+    return PaginatedAuditLogList(
+        items=out_items,
+        pagination=PaginationMeta.build(page=pagination.page, page_size=pagination.page_size, total=total),
+    )
 
 
 # ── Reports (CSV) ──────────────────────────────────────────────────

@@ -19,6 +19,7 @@ import type {
   CalendarEvent,
   UserCreatePayload,
   UserUpdatePayload,
+  AuditLogEntry,
 } from "@/types";
 import { businessDaysBetween } from "@/lib/dates";
 import * as db from "./db";
@@ -265,6 +266,22 @@ export async function rejectRequest(
   }
 
   return updated;
+}
+
+export async function listAuditLogs(
+  _action?: string,
+  _entityType?: string,
+  pagination?: PaginationParams,
+): Promise<PaginatedResponse<AuditLogEntry>> {
+  await delay(200);
+  return paginate([], pagination);
+}
+
+export async function listTeamHistory(status?: string, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
+  await delay(200);
+  let result = db.listAllRequests();
+  if (status) result = result.filter((r) => r.status === status);
+  return paginate(result, pagination);
 }
 
 // ── Admin ──────────────────────────────────────────────

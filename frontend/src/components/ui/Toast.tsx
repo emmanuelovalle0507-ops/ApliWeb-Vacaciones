@@ -26,7 +26,7 @@ const icons: Record<ToastType, React.ElementType> = {
 
 const styles: Record<ToastType, string> = {
   success: "bg-emerald-50 border-emerald-200 text-emerald-800",
-  error: "bg-red-50 border-red-200 text-red-800",
+  error: "bg-red-50 border-red-300 text-red-800 ring-1 ring-red-100",
   warning: "bg-amber-50 border-amber-200 text-amber-800",
   info: "bg-blue-50 border-blue-200 text-blue-800",
 };
@@ -44,9 +44,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const addToast = useCallback((type: ToastType, message: string) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setToasts((prev) => [...prev, { id, type, message }]);
+    const duration = type === "error" ? 6000 : 4000;
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    }, duration);
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -63,7 +64,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           return (
             <div
               key={t.id}
-              className={`flex items-start gap-3 px-4 py-3 rounded-xl border shadow-lg animate-[slideUp_0.3s_ease] ${styles[t.type]}`}
+              className={`flex items-start gap-3 px-4 py-3 rounded-xl border shadow-lg ${t.type === "error" ? "animate-[shakeX_0.5s_ease-in-out]" : "animate-[slideUp_0.3s_ease]"} ${styles[t.type]}`}
             >
               <Icon size={18} className={`shrink-0 mt-0.5 ${iconStyles[t.type]}`} />
               <p className="text-sm font-medium flex-1">{t.message}</p>

@@ -23,6 +23,7 @@ import type {
   CalendarEvent,
   UserCreatePayload,
   UserUpdatePayload,
+  AuditLogEntry,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
@@ -428,6 +429,16 @@ export async function rejectRequest(
   return mapRequest(req);
 }
 
+export async function listTeamHistory(status?: string, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (pagination?.page) params.set("page", String(pagination.page));
+  if (pagination?.pageSize) params.set("page_size", String(pagination.pageSize));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const result = await request<BackendVacationRequestList>(`/manager/vacation-requests/history${qs}`);
+  return { items: result.items.map(mapRequest), pagination: mapPagination(result.pagination) };
+}
+
 // ── Admin ──────────────────────────────────────────────
 export async function listUsers(filters?: UserFilters, pagination?: PaginationParams): Promise<PaginatedResponse<User>> {
   const params = new URLSearchParams();
@@ -748,4 +759,43 @@ export async function exportBalancesReport(year: number): Promise<string> {
   );
   if (!res.ok) throw new Error("Error al generar reporte de balances");
   return res.text();
+}
+
+// ── Audit Logs ───────────────────────────────────────────
+type BackendAuditLog = {
+  id: number;
+  actor_user_id: string | null;
+  actor_name: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export async function listAuditLogs(
+  action?: string,
+  entityType?: string,
+  pagination?: PaginationParams,
+): Promise<PaginatedResponse<AuditLogEntry>> {
+  const params = new URLSearchParams();
+  if (action) params.set("action", action);
+  if (entityType) params.set("entity_type", entityType);
+  if (pagination?.page) params.set("page", String(pagination.page));
+  if (pagination?.pageSize) params.set("page_size", String(pagination.pageSize));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const result = await request<{ items: BackendAuditLog[]; pagination: BackendPaginationMeta }>(`/admin/audit-logs${qs}`);
+  return {
+    items: result.items.map((l) => ({
+      id: l.id,
+      actorUserId: l.actor_user_id,
+      actorName: l.actor_name,
+      action: l.action,
+      entityType: l.entity_type,
+      entityId: l.entity_id,
+      metadata: l.metadata,
+      createdAt: l.created_at,
+    })),
+    pagination: mapPagination(result.pagination),
+  };
 }

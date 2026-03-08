@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Loader2, Calendar as CalendarIcon } from "lucide-react";
 import api from "@/api/client";
 import type { CalendarEvent } from "@/types";
+import { getMexicanHolidays } from "@/lib/holidays";
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
@@ -28,8 +29,31 @@ interface DayCellData {
   isCurrentMonth: boolean;
   isToday: boolean;
   isWeekend: boolean;
+  isHoliday: boolean;
+  holidayName?: string;
   dateStr: string;
   events: CalendarEvent[];
+}
+
+const HOLIDAY_NAMES: Record<string, string> = {};
+function getHolidayName(dateStr: string): string | undefined {
+  const year = parseInt(dateStr.substring(0, 4), 10);
+  const key = `${year}`;
+  if (!HOLIDAY_NAMES[key + "-loaded"]) {
+    const holidays = getMexicanHolidays(year);
+    const names = [
+      "A\u00f1o Nuevo",
+      "D\u00eda de la Constituci\u00f3n",
+      "Natalicio de Benito Ju\u00e1rez",
+      "D\u00eda del Trabajo",
+      "D\u00eda de la Independencia",
+      "Revoluci\u00f3n Mexicana",
+      "Navidad",
+    ];
+    holidays.forEach((h, i) => { HOLIDAY_NAMES[h] = names[i]; });
+    HOLIDAY_NAMES[key + "-loaded"] = "1";
+  }
+  return HOLIDAY_NAMES[dateStr];
 }
 
 function buildGrid(year: number, month: number, events: CalendarEvent[]): DayCellData[][] {
@@ -37,6 +61,7 @@ function buildGrid(year: number, month: number, events: CalendarEvent[]): DayCel
   const lastDay = new Date(year, month, 0).getDate();
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const holidaySet = new Set(getMexicanHolidays(year));
 
   // Monday=0 based start offset
   let startOffset = firstDay.getDay() - 1;
@@ -57,6 +82,7 @@ function buildGrid(year: number, month: number, events: CalendarEvent[]): DayCel
       isCurrentMonth: false,
       isToday: false,
       isWeekend: dayOfWeek >= 5,
+      isHoliday: false,
       dateStr,
       events: [],
     });
@@ -72,6 +98,8 @@ function buildGrid(year: number, month: number, events: CalendarEvent[]): DayCel
       isCurrentMonth: true,
       isToday: dateStr === todayStr,
       isWeekend: dayOfWeek >= 5,
+      isHoliday: holidaySet.has(dateStr),
+      holidayName: getHolidayName(dateStr),
       dateStr,
       events: dayEvents,
     });
@@ -90,6 +118,7 @@ function buildGrid(year: number, month: number, events: CalendarEvent[]): DayCel
         isCurrentMonth: false,
         isToday: false,
         isWeekend: dayOfWeek >= 5,
+        isHoliday: false,
         dateStr,
         events: [],
       });
@@ -226,17 +255,22 @@ export default function VacationCalendar({ teamId, title = "Calendario de Vacaci
                 return (
                   <button
                     key={cell.dateStr}
-                    onClick={() => hasEvents && cell.isCurrentMonth ? setSelectedDay(isSelected ? null : cell) : undefined}
+                    onClick={() => (hasEvents || cell.isHoliday) && cell.isCurrentMonth ? setSelectedDay(isSelected ? null : cell) : undefined}
+                    title={cell.isHoliday && cell.holidayName ? cell.holidayName : undefined}
                     className={`relative min-h-[80px] p-1.5 text-left transition-colors ${
                       cell.isCurrentMonth ? "" : "opacity-30"
                     } ${cell.isWeekend ? "bg-gray-50/50" : ""} ${
+                      cell.isHoliday && cell.isCurrentMonth ? "bg-red-50/60" : ""
+                    } ${
                       cell.isToday ? "ring-2 ring-inset ring-seekop-400" : ""
-                    } ${isSelected ? "bg-blue-50" : hasEvents && cell.isCurrentMonth ? "hover:bg-gray-50 cursor-pointer" : "cursor-default"}`}
+                    } ${isSelected ? "bg-blue-50" : (hasEvents || cell.isHoliday) && cell.isCurrentMonth ? "hover:bg-gray-50 cursor-pointer" : "cursor-default"}`}
                   >
                     <span
                       className={`inline-flex items-center justify-center w-6 h-6 text-xs rounded-full ${
                         cell.isToday
                           ? "bg-seekop-600 text-white font-bold"
+                          : cell.isHoliday && cell.isCurrentMonth
+                          ? "bg-red-100 text-red-600 font-bold"
                           : cell.isCurrentMonth
                           ? "text-gray-700 font-medium"
                           : "text-gray-300"
@@ -244,6 +278,11 @@ export default function VacationCalendar({ teamId, title = "Calendario de Vacaci
                     >
                       {cell.day}
                     </span>
+                    {cell.isHoliday && cell.isCurrentMonth && (
+                      <div className="mt-0.5 px-1.5 py-0.5 rounded text-[9px] leading-tight truncate bg-red-100 text-red-600 border border-red-200 font-medium">
+                        {cell.holidayName ?? "Feriado"}
+                      </div>
+                    )}
                     {cell.isCurrentMonth && cell.events.length > 0 && (
                       <div className="mt-0.5 space-y-0.5 overflow-hidden max-h-[48px]">
                         {cell.events.slice(0, 3).map((ev) => (
@@ -316,6 +355,10 @@ export default function VacationCalendar({ teamId, title = "Calendario de Vacaci
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
           <span className="text-[11px] text-gray-500">Pendiente</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+          <span className="text-[11px] text-gray-500">Feriado</span>
         </div>
         <div className="flex items-center gap-1.5 ml-auto">
           <div className="w-4 h-4 rounded ring-2 ring-seekop-400" />

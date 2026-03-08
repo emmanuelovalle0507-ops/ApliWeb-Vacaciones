@@ -10,7 +10,7 @@ class UserRepository:
         self.db = db
 
     def get_by_email(self, email: str) -> User | None:
-        stmt = select(User).where(User.email == email)
+        stmt = select(User).where(func.lower(User.email) == email.lower())
         return self.db.execute(stmt).scalar_one_or_none()
 
     def get_by_id(self, user_id: str) -> User | None:
