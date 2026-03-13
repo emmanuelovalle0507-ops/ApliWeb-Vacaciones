@@ -97,6 +97,24 @@ TOOL_DEFINITIONS: list[ToolDef] = [
         allowed_roles={"MANAGER", "ADMIN", "HR"},
         parameters=[{"name": "year", "type": "int", "description": "Año de referencia (opcional)"}],
     ),
+    ToolDef(
+        name="list_all_balances",
+        description="Lista el saldo de vacaciones de todos los empleados (o del equipo para managers): días disponibles, usados, otorgados. Útil para consultar el balance de un empleado específico por nombre.",
+        allowed_roles={"MANAGER", "ADMIN", "HR"},
+        parameters=[{"name": "year", "type": "int", "description": "Año a consultar (opcional, default año actual)"}],
+    ),
+    ToolDef(
+        name="get_upcoming_absences",
+        description="Muestra quién estará de vacaciones en los próximos días (por defecto próximos 7 días). Incluye nombre, equipo y fechas.",
+        allowed_roles={"MANAGER", "ADMIN", "HR"},
+        parameters=[{"name": "days_ahead", "type": "int", "description": "Número de días a futuro para buscar (default 7)"}],
+    ),
+    ToolDef(
+        name="get_availability_summary",
+        description="Resumen de disponibilidad: lista quién estará presente y quién ausente en los próximos días.",
+        allowed_roles={"MANAGER", "ADMIN", "HR"},
+        parameters=[{"name": "days_ahead", "type": "int", "description": "Número de días a futuro (default 7)"}],
+    ),
 ]
 
 
@@ -395,6 +413,141 @@ class AIToolExecutor:
             record_count=1,
         )
 
+    # ── list_all_balances ───────────────────────────────
+    def list_all_balances(self, team_id: str | None = None, manager_id: str | None = None, year: int | None = None) -> ToolResult:
+        y = year or self._today().year
+
+        team_alias = aliased(Team)
+        stmt = (
+            select(VacationBalance, User.full_name, User.role, team_alias.name.label("team_name"))
+            .join(User, User.id == VacationBalance.user_id)
+            .outerjoin(team_alias, team_alias.id == User.team_id)
+            .where(VacationBalance.year == y, User.is_active.is_(True))
+        )
+        if team_id:
+            stmt = stmt.where(User.team_id == team_id)
+        elif manager_id:
+            stmt = stmt.where(User.manager_id == manager_id)
+
+        stmt = stmt.order_by(User.full_name).limit(50)
+        rows = self.db.execute(stmt).all()
+
+        if not rows:
+            return ToolResult(tool_name="list_all_balances", data=f"No se encontraron balances para el año {y}.")
+
+        lines = []
+        for bal, name, role, t_name in rows:
+            available = float(bal.available_days)
+            used = float(bal.used_days)
+            granted = available + used
+            lines.append(
+                f"• {name} ({role.value}, {t_name or 'Sin equipo'}): {granted:.0f} otorgados, {used:.0f} usados, {available:.0f} disponibles"
+            )
+        return ToolResult(
+            tool_name="list_all_balances",
+            data=f"Balances de vacaciones {y} ({len(rows)} empleados):\n" + "\n".join(lines),
+            record_count=len(rows),
+        )
+
+    # ── get_upcoming_absences ─────────────────────────
+    def get_upcoming_absences(self, team_id: str | None = None, manager_id: str | None = None, days_ahead: int = 7) -> ToolResult:
+        from datetime import timedelta
+        today = self._today()
+        end_date = today + timedelta(days=days_ahead)
+
+        filters = [
+            VacationRequest.status == VacationRequestStatus.APPROVED,
+            VacationRequest.start_date <= end_date,
+            VacationRequest.end_date >= today,
+        ]
+        if team_id:
+            filters.append(VacationRequest.team_id == team_id)
+        elif manager_id:
+            filters.append(VacationRequest.manager_id == manager_id)
+
+        emp_alias = aliased(User)
+        stmt = (
+            select(VacationRequest, emp_alias.full_name)
+            .join(emp_alias, emp_alias.id == VacationRequest.employee_id)
+            .where(*filters)
+            .order_by(VacationRequest.start_date.asc())
+            .limit(30)
+        )
+        rows = self.db.execute(stmt).all()
+        if not rows:
+            return ToolResult(
+                tool_name="get_upcoming_absences",
+                data=f"No hay ausencias aprobadas entre {today} y {end_date}. Todos los empleados estarán disponibles.",
+                record_count=0,
+            )
+
+        lines = []
+        for req, emp_name in rows:
+            team_name = self._get_team_name(req.team_id)
+            lines.append(
+                f"• {emp_name} ({team_name}): {req.start_date} a {req.end_date} ({req.requested_days:.0f} días)"
+            )
+        return ToolResult(
+            tool_name="get_upcoming_absences",
+            data=(
+                f"Ausencias aprobadas entre {today} y {end_date} ({len(rows)} registros):\n"
+                + "\n".join(lines)
+            ),
+            record_count=len(rows),
+        )
+
+    # ── get_availability_summary ─────────────────────
+    def get_availability_summary(self, team_id: str | None = None, manager_id: str | None = None, days_ahead: int = 7) -> ToolResult:
+        from datetime import timedelta
+        today = self._today()
+        end_date = today + timedelta(days=days_ahead)
+
+        # Get all active employees
+        emp_filters = [User.is_active.is_(True)]
+        if team_id:
+            emp_filters.append(User.team_id == team_id)
+        elif manager_id:
+            emp_filters.append(User.manager_id == manager_id)
+
+        all_employees = list(
+            self.db.execute(
+                select(User).where(*emp_filters).order_by(User.full_name)
+            ).scalars().all()
+        )
+
+        # Get employees who have approved vacations overlapping the range
+        absence_filters = [
+            VacationRequest.status == VacationRequestStatus.APPROVED,
+            VacationRequest.start_date <= end_date,
+            VacationRequest.end_date >= today,
+        ]
+        if team_id:
+            absence_filters.append(VacationRequest.team_id == team_id)
+        elif manager_id:
+            absence_filters.append(VacationRequest.manager_id == manager_id)
+
+        absent_employee_ids = set(
+            row[0] for row in self.db.execute(
+                select(VacationRequest.employee_id).where(*absence_filters)
+            ).all()
+        )
+
+        absent = [e for e in all_employees if str(e.id) in {str(eid) for eid in absent_employee_ids}]
+        present = [e for e in all_employees if str(e.id) not in {str(eid) for eid in absent_employee_ids}]
+
+        absent_lines = [f"• {e.full_name} ({self._get_team_name(e.team_id)})" for e in absent] if absent else ["• Nadie ausente"]
+        present_lines = [f"• {e.full_name} ({self._get_team_name(e.team_id)})" for e in present] if present else ["• Nadie disponible"]
+
+        return ToolResult(
+            tool_name="get_availability_summary",
+            data=(
+                f"Disponibilidad del {today} al {end_date}:\n\n"
+                f"DISPONIBLES ({len(present)}):\n" + "\n".join(present_lines) + "\n\n"
+                f"AUSENTES/DE VACACIONES ({len(absent)}):\n" + "\n".join(absent_lines)
+            ),
+            record_count=len(all_employees),
+        )
+
     # ── Dispatcher ─────────────────────────────────────
     def execute(self, tool_name: str, role: str, user_id: str, team_id: str | None, **kwargs: Any) -> ToolResult:
         # Permission check
@@ -423,6 +576,17 @@ class AIToolExecutor:
                 return self.get_global_summary()
             elif tool_name == "get_policies_by_area":
                 return self.get_policies_by_area(team_id=team_id)
+            elif tool_name == "list_all_balances":
+                mgr_id = user_id if role == "MANAGER" else None
+                return self.list_all_balances(team_id=team_id, manager_id=mgr_id)
+            elif tool_name == "get_upcoming_absences":
+                if role == "MANAGER":
+                    return self.get_upcoming_absences(team_id=None, manager_id=user_id, days_ahead=kwargs.get("days_ahead", 7))
+                return self.get_upcoming_absences(team_id=team_id, manager_id=None, days_ahead=kwargs.get("days_ahead", 7))
+            elif tool_name == "get_availability_summary":
+                if role == "MANAGER":
+                    return self.get_availability_summary(team_id=None, manager_id=user_id, days_ahead=kwargs.get("days_ahead", 7))
+                return self.get_availability_summary(team_id=team_id, manager_id=None, days_ahead=kwargs.get("days_ahead", 7))
             else:
                 return ToolResult(tool_name=tool_name, data="Herramienta no implementada.")
         except Exception as exc:
