@@ -14,7 +14,7 @@ import BalanceCard from "@/components/vacations/BalanceCard";
 import RequestForm from "@/components/vacations/RequestForm";
 import RequestsTable from "@/components/vacations/RequestsTable";
 import CancelDialog from "@/components/vacations/CancelDialog";
-import AIChatPanel from "@/components/ai/AIChatPanel";
+import VacationCalendar from "@/components/calendar/VacationCalendar";
 import { useToast } from "@/components/ui/Toast";
 
 export default function EmployeeDashboardPage() {
@@ -34,7 +34,10 @@ export default function EmployeeDashboardPage() {
 
   const requestsQ = useQuery({
     queryKey: ["myRequests", user?.id],
-    queryFn: () => api.requests.listMine(user!.id),
+    queryFn: async () => {
+      const res = await api.requests.listMine(user!.id);
+      return res.items;
+    },
     enabled: !!user,
   });
 
@@ -121,13 +124,13 @@ export default function EmployeeDashboardPage() {
             data={requestsQ.data ?? []}
             isLoading={requestsQ.isLoading}
             showActions
-            onCancel={(req) => setCancelTarget(req)}
+            onCancel={(req: VacationRequest) => setCancelTarget(req)}
             emptyMessage="No tienes solicitudes de vacaciones."
           />
         </div>
 
-        {/* AI Assistant */}
-        <AIChatPanel title="Asistente IA" />
+        {/* Calendar */}
+        <VacationCalendar title="Calendario de Vacaciones" />
 
         {/* Cancel dialog */}
         <CancelDialog

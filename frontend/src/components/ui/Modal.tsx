@@ -4,6 +4,14 @@ import React, { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import Button from "./Button";
 
+type ModalSize = "md" | "lg" | "xl";
+
+const sizeClasses: Record<ModalSize, string> = {
+  md: "max-w-lg",
+  lg: "max-w-2xl",
+  xl: "max-w-3xl",
+};
+
 interface ModalProps {
   open: boolean;
   onClose: () => void;
@@ -15,6 +23,7 @@ interface ModalProps {
   onConfirm?: () => void;
   loading?: boolean;
   footer?: React.ReactNode;
+  size?: ModalSize;
 }
 
 export default function Modal({
@@ -28,6 +37,7 @@ export default function Modal({
   onConfirm,
   loading = false,
   footer,
+  size = "md",
 }: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
@@ -55,7 +65,7 @@ export default function Modal({
         if (e.target === overlayRef.current && !loading) onClose();
       }}
     >
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className={`bg-white rounded-2xl shadow-xl w-full ${sizeClasses[size]} max-h-[90vh] overflow-y-auto`}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>

@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, Enum as SQLEnum, ForeignKey, String
+from sqlalchemy import Boolean, Date, DateTime, Enum as SQLEnum, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,7 +35,17 @@ class User(Base):
         nullable=True,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    position: Mapped[str | None] = mapped_column(String(150), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    manager: Mapped["User | None"] = relationship("User", remote_side=[id], backref="team_members")
+    manager: Mapped["User | None"] = relationship("User", remote_side=[id], backref="team_members", foreign_keys=[manager_id])
+    managers: Mapped[list["User"]] = relationship(
+        "User",
+        secondary="user_managers",
+        primaryjoin="User.id == UserManager.user_id",
+        secondaryjoin="User.id == UserManager.manager_id",
+        viewonly=True,
+    )

@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   Shield,
+  UserCircle,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -20,21 +21,26 @@ const ICON_MAP: Record<string, LucideIcon> = {
   LayoutDashboard,
   CalendarDays,
   Shield,
+  UserCircle,
 };
 
 const NAV_CONFIG: Record<UserRole, NavItem[]> = {
   EMPLOYEE: [
     { label: "Mi Dashboard", href: "/employee/dashboard", icon: "LayoutDashboard" },
+    { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
   MANAGER: [
     { label: "Dashboard Manager", href: "/manager/dashboard", icon: "LayoutDashboard" },
     { label: "Mis Vacaciones", href: "/employee/dashboard", icon: "CalendarDays" },
+    { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
   ADMIN: [
     { label: "Panel Admin", href: "/admin/dashboard", icon: "LayoutDashboard" },
+    { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
   HR: [
     { label: "Panel RRHH", href: "/hr/dashboard", icon: "LayoutDashboard" },
+    { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
 };
 

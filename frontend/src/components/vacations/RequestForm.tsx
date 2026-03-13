@@ -8,7 +8,7 @@ import { createRequestSchema, type CreateRequestFormData } from "@/types/schemas
 import { businessDaysBetween } from "@/lib/dates";
 import { todayISO } from "@/lib/dates";
 import api from "@/api/client";
-import Input from "@/components/ui/Input";
+import DatePickerInput from "@/components/ui/DatePickerInput";
 import Textarea from "@/components/ui/Textarea";
 import Button from "@/components/ui/Button";
 
@@ -31,6 +31,7 @@ export default function RequestForm({ availableDays, onSubmit, onCancel }: Reque
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting },
     setError,
   } = useForm<CreateRequestFormData>({
@@ -84,19 +85,19 @@ export default function RequestForm({ availableDays, onSubmit, onCancel }: Reque
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Input
-          type="date"
+        <DatePickerInput
           label="Fecha de inicio"
-          min={today}
+          value={startDate}
+          onChange={(v) => setValue("startDate", v, { shouldValidate: true })}
+          minDate={today}
           error={errors.startDate?.message}
-          {...register("startDate")}
         />
-        <Input
-          type="date"
+        <DatePickerInput
           label="Fecha de fin"
-          min={startDate || today}
+          value={endDate}
+          onChange={(v) => setValue("endDate", v, { shouldValidate: true })}
+          minDate={startDate || today}
           error={errors.endDate?.message}
-          {...register("endDate")}
         />
       </div>
 
@@ -159,7 +160,7 @@ export default function RequestForm({ availableDays, onSubmit, onCancel }: Reque
         <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
           <AlertCircle size={18} className="text-amber-600" />
           <p className="text-sm text-amber-800">
-            El rango seleccionado no contiene días hábiles (se excluyen sábados y domingos).
+            El rango seleccionado no contiene días hábiles (se excluyen sábados, domingos y días festivos oficiales).
           </p>
         </div>
       )}

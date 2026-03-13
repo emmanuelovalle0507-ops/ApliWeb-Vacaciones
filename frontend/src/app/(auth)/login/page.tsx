@@ -7,8 +7,6 @@ import { Eye, EyeOff, AlertCircle, Loader2, Shield, BarChart3, Users, CalendarCh
 import { loginSchema, type LoginFormData } from "@/types/schemas";
 import { useAuth } from "@/providers/AuthProvider";
 
-const isDemoBypassEnabled = (process.env.NEXT_PUBLIC_DEMO_BYPASS || "false") === "true";
-
 function SeekopLogo({ size = "lg" }: { size?: "sm" | "lg" }) {
   const isLg = size === "lg";
   return (
@@ -29,11 +27,10 @@ function SeekopLogo({ size = "lg" }: { size?: "sm" | "lg" }) {
 }
 
 export default function LoginPage() {
-  const { login, loginDemo } = useAuth();
+  const { login } = useAuth();
   const [serverError, setServerError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [demoLoading, setDemoLoading] = useState<string | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -54,17 +51,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleDemoLogin = async (role: "EMPLOYEE" | "MANAGER" | "ADMIN" | "HR") => {
-    setServerError("");
-    setDemoLoading(role);
-    try {
-      await loginDemo(role);
-    } catch (err: unknown) {
-      setServerError(err instanceof Error ? err.message : "Error al iniciar sesión demo");
-    } finally {
-      setDemoLoading(null);
-    }
-  };
 
   return (
     <div className="min-h-screen flex">
@@ -192,9 +178,14 @@ export default function LoginPage() {
 
               {/* Error */}
               {serverError && (
-                <div className="flex items-start gap-3 p-3.5 bg-red-50 border border-red-200 rounded-xl animate-[fadeIn_0.3s_ease]">
-                  <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700">{serverError}</p>
+                <div className="flex items-start gap-3 p-4 bg-gradient-to-r from-red-50 to-red-100/50 border border-red-200 rounded-xl animate-[shakeX_0.5s_ease-in-out]">
+                  <div className="flex items-center justify-center w-9 h-9 rounded-full bg-red-100 shrink-0">
+                    <AlertCircle size={20} className="text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-red-700">Error de autenticaci&#243;n</p>
+                    <p className="text-xs text-red-600 mt-0.5">{serverError}</p>
+                  </div>
                 </div>
               )}
 
@@ -214,31 +205,6 @@ export default function LoginPage() {
                 )}
               </button>
 
-              {/* Demo buttons */}
-              {isDemoBypassEnabled && (
-                <div className="pt-4 border-t border-gray-100">
-                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3 text-center">Acceso rápido</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {([
-                      { role: "EMPLOYEE" as const, label: "Empleado", color: "bg-seekop-50 text-seekop-700 hover:bg-seekop-100 border-seekop-200" },
-                      { role: "MANAGER" as const, label: "Manager", color: "bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200" },
-                      { role: "ADMIN" as const, label: "Admin", color: "bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200" },
-                      { role: "HR" as const, label: "RRHH", color: "bg-teal-50 text-teal-700 hover:bg-teal-100 border-teal-200" },
-                    ]).map((d) => (
-                      <button
-                        key={d.role}
-                        type="button"
-                        disabled={!!demoLoading}
-                        onClick={() => void handleDemoLogin(d.role)}
-                        className={`flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border transition-all duration-200 disabled:opacity-50 ${d.color}`}
-                      >
-                        {demoLoading === d.role ? <Loader2 size={14} className="animate-spin" /> : null}
-                        {d.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </form>
           </div>
 

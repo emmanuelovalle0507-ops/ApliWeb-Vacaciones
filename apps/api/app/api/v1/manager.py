@@ -4,9 +4,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.repositories.user_repo import UserRepository
+from app.repositories.vacation_request_repo import VacationRequestRepository
 from app.schemas.admin import UserListOut, UserOut
 from app.schemas.auth import UserSummary
+from app.schemas.pagination import PaginationMeta, PaginationParams
 from app.schemas.vacation_request import (
+    PaginatedVacationRequestList,
     VacationApprovalResponse,
     VacationRequestDecision,
     VacationRequestList,
@@ -18,14 +21,20 @@ from app.services.vacation_request_service import PolicyValidationError, Vacatio
 router = APIRouter(prefix="/manager", tags=["manager"])
 
 
-@router.get("/vacation-requests/pending", response_model=VacationRequestList)
+@router.get("/vacation-requests/pending", response_model=PaginatedVacationRequestList)
 def list_pending(
     db: Session = Depends(get_db),
     current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
-) -> VacationRequestList:
-    service = VacationRequestService(db)
-    items = service.list_pending_for_manager(current_user.id)
-    return VacationRequestList(items=[_to_out_enriched(item, db) for item in items])
+    pagination: PaginationParams = Depends(),
+) -> PaginatedVacationRequestList:
+    repo = VacationRequestRepository(db)
+    items, total = repo.list_pending_by_manager_paginated(
+        str(current_user.id), offset=pagination.offset, limit=pagination.limit
+    )
+    return PaginatedVacationRequestList(
+        items=[_to_out_enriched(item, db) for item in items],
+        pagination=PaginationMeta.build(page=pagination.page, page_size=pagination.page_size, total=total),
+    )
 
 
 @router.post("/vacation-requests/{request_id}/approve", response_model=VacationApprovalResponse)
@@ -73,6 +82,23 @@ def reject_request(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
     return _to_out_enriched(request, db)
+
+
+@router.get("/vacation-requests/history", response_model=PaginatedVacationRequestList)
+def list_team_history(
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+    pagination: PaginationParams = Depends(),
+) -> PaginatedVacationRequestList:
+    repo = VacationRequestRepository(db)
+    items, total = repo.list_by_manager_all_paginated(
+        str(current_user.id), status=status, offset=pagination.offset, limit=pagination.limit
+    )
+    return PaginatedVacationRequestList(
+        items=[_to_out_enriched(item, db) for item in items],
+        pagination=PaginationMeta.build(page=pagination.page, page_size=pagination.page_size, total=total),
+    )
 
 
 @router.get("/team/members", response_model=UserListOut)

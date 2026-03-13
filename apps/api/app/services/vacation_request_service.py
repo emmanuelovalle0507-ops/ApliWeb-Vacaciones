@@ -10,6 +10,7 @@ from app.models.team_policy import TeamPolicy
 from app.models.user import UserRole
 from app.models.vacation_balance import VacationBalance
 from app.models.vacation_request import VacationRequest, VacationRequestStatus
+from app.core.holidays import is_holiday
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.balance_adjustment_repo import BalanceAdjustmentRepository
 from app.repositories.team_policy_repo import TeamPolicyRepository
@@ -43,7 +44,7 @@ class VacationRequestService:
         count = 0
         current = start_date
         while current <= end_date:
-            if current.weekday() < 5:  # Mon-Fri = 0-4
+            if current.weekday() < 5 and not is_holiday(current):  # Mon-Fri, not holiday
                 count += 1
             current = date.fromordinal(current.toordinal() + 1)
         if count <= 0:
@@ -104,11 +105,13 @@ class VacationRequestService:
         employee = self.user_repo.get_by_id(employee_id)
         if not employee:
             raise ValueError("Empleado no encontrado.")
-        if not employee.manager_id:
+        manager_ids = self.user_repo.get_manager_ids(employee_id)
+        if not manager_ids and not employee.manager_id:
             raise ValueError("No tienes un manager asignado. Contacta al administrador.")
         if not employee.team_id:
             raise ValueError("No estás asignado a ningún equipo. Contacta al administrador.")
-        manager = self.user_repo.get_by_id(str(employee.manager_id))
+        primary_manager_id = manager_ids[0] if manager_ids else str(employee.manager_id)
+        manager = self.user_repo.get_by_id(primary_manager_id)
         if not manager:
             raise ValueError("Tu manager asignado no fue encontrado. Contacta al administrador.")
         return employee, manager
@@ -263,18 +266,22 @@ class VacationRequestService:
         )
         self.db.flush()
 
-        try:
-            mgr = self.user_repo.get_by_id(str(employee.manager_id))
-            self.notif_service.notify_request_created(
-                request_id=str(created.id),
-                employee_name=employee.full_name,
-                manager_id=str(employee.manager_id),
-                start_date=start_date.strftime("%d/%m/%Y"),
-                end_date=end_date.strftime("%d/%m/%Y"),
-                days=self._to_float(requested_days),
-            )
-        except Exception:
-            pass  # notification failure must not block request creation
+        # Notify all managers of the employee
+        all_manager_ids = self.user_repo.get_manager_ids(str(employee.id))
+        if not all_manager_ids and employee.manager_id:
+            all_manager_ids = [str(employee.manager_id)]
+        for mgr_id in all_manager_ids:
+            try:
+                self.notif_service.notify_request_created(
+                    request_id=str(created.id),
+                    employee_name=employee.full_name,
+                    manager_id=mgr_id,
+                    start_date=start_date.strftime("%d/%m/%Y"),
+                    end_date=end_date.strftime("%d/%m/%Y"),
+                    days=self._to_float(requested_days),
+                )
+            except Exception:
+                pass  # notification failure must not block request creation
 
         return created
 
@@ -284,21 +291,24 @@ class VacationRequestService:
     def list_pending_for_manager(self, manager_id: str) -> list[VacationRequest]:
         return self.request_repo.list_pending_by_manager(manager_id)
 
+    def _is_authorized_manager(self, manager_id: str, request: VacationRequest) -> bool:
+        if request.manager_id == UUID(manager_id):
+            return True
+        return self.user_repo.is_manager_of(manager_id, str(request.employee_id))
+
     def approve(self, request_id: str, manager_id: str, decision_comment: str | None) -> tuple[VacationRequest, VacationBalance]:
         manager_uuid = UUID(manager_id)
         request = self.request_repo.get_by_id_for_update(request_id)
         if not request:
             raise ValueError("Solicitud no encontrada.")
-        if request.manager_id != manager_uuid:
-            raise PermissionError("No puedes aprobar esta solicitud porque no eres el manager asignado.")
+        if not self._is_authorized_manager(manager_id, request):
+            raise PermissionError("No puedes aprobar esta solicitud porque no eres manager de este empleado.")
         if request.status != VacationRequestStatus.PENDING:
             raise ValueError("Esta solicitud ya fue procesada.")
 
         manager = self.user_repo.get_by_id(manager_id)
         if not manager:
             raise ValueError("Manager no encontrado.")
-        if request.team_id and manager.team_id != request.team_id:
-            raise PermissionError("No puedes aprobar solicitudes de otro equipo.")
 
         if request.team_id:
             self._validate_team_daily_capacity(str(request.team_id), request.start_date, request.end_date)
@@ -371,8 +381,8 @@ class VacationRequestService:
         request = self.request_repo.get_by_id_for_update(request_id)
         if not request:
             raise ValueError("Solicitud no encontrada.")
-        if request.manager_id != manager_uuid:
-            raise PermissionError("No puedes rechazar esta solicitud porque no eres el manager asignado.")
+        if not self._is_authorized_manager(manager_id, request):
+            raise PermissionError("No puedes rechazar esta solicitud porque no eres manager de este empleado.")
         if request.status != VacationRequestStatus.PENDING:
             raise ValueError("Esta solicitud ya fue procesada.")
         if not decision_comment or not decision_comment.strip():
@@ -563,3 +573,55 @@ class VacationRequestService:
         )
         self.db.flush()
         return balance
+
+    def rollover_year(
+        self,
+        admin_id: str,
+        from_year: int,
+        max_carryover_days: Decimal = Decimal("10"),
+    ) -> list[VacationBalance]:
+        """Carry over unused days from from_year to from_year+1 for all users."""
+        admin_uuid = UUID(admin_id)
+        to_year = from_year + 1
+        old_balances = self.balance_repo.list_by_year(from_year)
+        results: list[VacationBalance] = []
+
+        for old_bal in old_balances:
+            unused = old_bal.available_days
+            carry = min(unused, max_carryover_days)
+            if carry <= 0:
+                continue
+
+            new_bal = self.balance_repo.get_by_user_year_for_update(
+                str(old_bal.user_id), to_year
+            )
+            if not new_bal:
+                new_bal = VacationBalance(
+                    user_id=old_bal.user_id,
+                    year=to_year,
+                    available_days=Decimal("0"),
+                    used_days=Decimal("0"),
+                    carried_over_days=Decimal("0"),
+                )
+                new_bal = self.balance_repo.add(new_bal)
+                self.db.flush()
+
+            new_bal.carried_over_days = carry
+            new_bal.available_days += carry
+            new_bal.version += 1
+
+            self.adjustment_repo.add(
+                BalanceAdjustment(
+                    user_id=old_bal.user_id,
+                    request_id=None,
+                    adjustment_type=BalanceAdjustmentType.ADMIN_MANUAL_ADJUST,
+                    days_delta=carry,
+                    performed_by=admin_uuid,
+                    reason=f"Rollover from {from_year}",
+                    operation_key=f"rollover:{old_bal.user_id}:{from_year}:{to_year}",
+                )
+            )
+            results.append(new_bal)
+
+        self.db.flush()
+        return results

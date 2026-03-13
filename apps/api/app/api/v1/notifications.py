@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
+from app.repositories.notification_repo import NotificationRepository
 from app.schemas.auth import UserSummary
-from app.schemas.notification import MarkAllReadOut, NotificationCountOut, NotificationList, NotificationOut
+from app.schemas.notification import MarkAllReadOut, NotificationCountOut, NotificationList, NotificationOut, PaginatedNotificationList
+from app.schemas.pagination import PaginationMeta, PaginationParams
 from app.services.notification_service import NotificationService
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -24,17 +26,23 @@ def _to_out(n) -> NotificationOut:
     )
 
 
-@router.get("/me", response_model=NotificationList)
+@router.get("/me", response_model=PaginatedNotificationList)
 def list_my_notifications(
-    limit: int = 50,
     unread_only: bool = False,
     db: Session = Depends(get_db),
     current_user: UserSummary = Depends(get_current_user),
-) -> NotificationList:
-    service = NotificationService(db)
-    items = service.list_for_user(current_user.id, limit=limit, unread_only=unread_only)
-    unread = service.count_unread(current_user.id)
-    return NotificationList(items=[_to_out(n) for n in items], unread_count=unread)
+    pagination: PaginationParams = Depends(),
+) -> PaginatedNotificationList:
+    repo = NotificationRepository(db)
+    items, total = repo.list_by_user_paginated(
+        str(current_user.id), offset=pagination.offset, limit=pagination.limit, unread_only=unread_only
+    )
+    unread = repo.count_unread(str(current_user.id))
+    return PaginatedNotificationList(
+        items=[_to_out(n) for n in items],
+        unread_count=unread,
+        pagination=PaginationMeta.build(page=pagination.page, page_size=pagination.page_size, total=total),
+    )
 
 
 @router.get("/me/count", response_model=NotificationCountOut)

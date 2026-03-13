@@ -177,6 +177,33 @@ export function listNotificationsByUser(userId: string): NotificationEvent[] {
     .map(({ _ownerId, ...rest }) => rest);
 }
 
+// ── Balance Mutations ─────────────────────────────────
+export function upsertBalance(balance: VacationBalance): VacationBalance {
+  const idx = balances.findIndex(
+    (b) => b.userId === balance.userId && b.year === balance.year
+  );
+  if (idx >= 0) {
+    balances[idx] = { ...balance };
+    return balances[idx];
+  }
+  balances.push({ ...balance });
+  return balance;
+}
+
+export function updateBalance(
+  userId: string,
+  year: number,
+  updates: Partial<VacationBalance>
+): VacationBalance | undefined {
+  const idx = balances.findIndex(
+    (b) => b.userId === userId && b.year === year
+  );
+  if (idx === -1) return undefined;
+  balances[idx] = { ...balances[idx], ...updates };
+  return balances[idx];
+}
+
+// ── Notification Mutations ────────────────────────────
 export function countUnreadByUser(userId: string): number {
   return notifications.filter((n) => n._ownerId === userId && !n.isRead).length;
 }

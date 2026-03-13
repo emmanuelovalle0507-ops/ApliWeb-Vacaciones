@@ -16,6 +16,14 @@ import type {
   CreateRequestPayload,
   UserFilters,
   RequestFilters,
+  RolloverResult,
+  PaginatedResponse,
+  PaginationMeta,
+  PaginationParams,
+  CalendarEvent,
+  UserCreatePayload,
+  UserUpdatePayload,
+  AuditLogEntry,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
@@ -27,6 +35,7 @@ type BackendUserSummary = {
   role: User["role"];
   team_id?: string | null;
   team_name?: string | null;
+  must_change_password?: boolean;
 };
 
 type BackendTeamPolicy = {
@@ -108,7 +117,14 @@ type BackendVacationRequest = {
   created_at: string;
 };
 
-type BackendVacationRequestList = { items: BackendVacationRequest[] };
+type BackendPaginationMeta = {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+};
+
+type BackendVacationRequestList = { items: BackendVacationRequest[]; pagination: BackendPaginationMeta };
 
 type BackendBalance = {
   user_id: string;
@@ -127,12 +143,15 @@ type BackendUserFull = {
   team_id?: string | null;
   team_name?: string | null;
   manager_id?: string | null;
+  manager_ids?: string[];
   is_active: boolean;
+  hire_date?: string | null;
+  position?: string | null;
   created_at: string;
 };
 
-type BackendUserListResponse = { items: BackendUserFull[] };
-type BackendBalanceListResponse = { items: BackendBalance[] };
+type BackendUserListResponse = { items: BackendUserFull[]; pagination: BackendPaginationMeta };
+type BackendBalanceListResponse = { items: BackendBalance[]; pagination: BackendPaginationMeta };
 
 type BackendTeam = {
   id: string;
@@ -212,6 +231,23 @@ function mapRequest(req: BackendVacationRequest): VacationRequest {
   };
 }
 
+function mapPagination(p: BackendPaginationMeta): PaginationMeta {
+  return { page: p.page, pageSize: p.page_size, total: p.total, totalPages: p.total_pages };
+}
+
+function paginationQS(params?: PaginationParams): string {
+  if (!params) return "";
+  const parts: string[] = [];
+  if (params.page) parts.push(`page=${params.page}`);
+  if (params.pageSize) parts.push(`page_size=${params.pageSize}`);
+  return parts.length ? parts.join("&") : "";
+}
+
+function appendQS(base: string, extra: string): string {
+  if (!extra) return base;
+  return base.includes("?") ? `${base}&${extra}` : `${base}?${extra}`;
+}
+
 function mapBalance(balance: BackendBalance): VacationBalance {
   const granted = Number(balance.available_days) + Number(balance.used_days);
   return {
@@ -277,11 +313,19 @@ export async function login(email: string, password: string): Promise<AuthRespon
   return {
     token: body.access_token,
     user: mapUser(body.user, email),
+    mustChangePassword: body.user.must_change_password ?? false,
   };
 }
 
 export async function logout(): Promise<void> {
   return Promise.resolve();
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await request("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
 }
 
 // ── Me ─────────────────────────────────────────────────
@@ -341,9 +385,10 @@ export async function createRequest(
   return mapRequest(req);
 }
 
-export async function listMyRequests(_userId: string): Promise<VacationRequest[]> {
-  const result = await request<BackendVacationRequestList>("/vacation-requests/me");
-  return result.items.map(mapRequest);
+export async function listMyRequests(_userId: string, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
+  const url = appendQS("/vacation-requests/me", paginationQS(pagination));
+  const result = await request<BackendVacationRequestList>(url);
+  return { items: result.items.map(mapRequest), pagination: mapPagination(result.pagination) };
 }
 
 export async function cancelRequest(requestId: string, _userId: string): Promise<VacationRequest> {
@@ -354,9 +399,10 @@ export async function cancelRequest(requestId: string, _userId: string): Promise
 }
 
 // ── Approvals ──────────────────────────────────────────
-export async function listPending(_managerId: string): Promise<VacationRequest[]> {
-  const result = await request<BackendVacationRequestList>("/manager/vacation-requests/pending");
-  return result.items.map(mapRequest);
+export async function listPending(_managerId: string, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
+  const url = appendQS("/manager/vacation-requests/pending", paginationQS(pagination));
+  const result = await request<BackendVacationRequestList>(url);
+  return { items: result.items.map(mapRequest), pagination: mapPagination(result.pagination) };
 }
 
 export async function approveRequest(
@@ -383,44 +429,115 @@ export async function rejectRequest(
   return mapRequest(req);
 }
 
+export async function listTeamHistory(status?: string, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (pagination?.page) params.set("page", String(pagination.page));
+  if (pagination?.pageSize) params.set("page_size", String(pagination.pageSize));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const result = await request<BackendVacationRequestList>(`/manager/vacation-requests/history${qs}`);
+  return { items: result.items.map(mapRequest), pagination: mapPagination(result.pagination) };
+}
+
 // ── Admin ──────────────────────────────────────────────
-export async function listUsers(filters?: UserFilters): Promise<User[]> {
+export async function listUsers(filters?: UserFilters, pagination?: PaginationParams): Promise<PaginatedResponse<User>> {
   const params = new URLSearchParams();
   if (filters?.role) params.set("role", filters.role);
   if (filters?.areaId) params.set("team_id", filters.areaId);
   if (filters?.search) params.set("search", filters.search);
+  if (pagination?.page) params.set("page", String(pagination.page));
+  if (pagination?.pageSize) params.set("page_size", String(pagination.pageSize));
   const qs = params.toString() ? `?${params.toString()}` : "";
   const result = await request<BackendUserListResponse>(`/admin/users${qs}`);
-  return result.items.map((u) => ({
+  return {
+    items: result.items.map(mapUserFull),
+    pagination: mapPagination(result.pagination),
+  };
+}
+
+function mapUserFull(u: BackendUserFull): User {
+  return {
     id: u.id,
     fullName: u.full_name,
     email: u.email,
     role: mapRole(u.role),
     area: { id: u.team_id ?? "no-team", name: u.team_name ?? "Sin equipo" },
     managerId: u.manager_id ?? undefined,
-  }));
+    managerIds: u.manager_ids ?? [],
+    isActive: u.is_active,
+    hireDate: u.hire_date ?? undefined,
+    position: u.position ?? undefined,
+  };
 }
 
-export async function listAllRequests(filters?: RequestFilters): Promise<VacationRequest[]> {
+export async function createUser(payload: UserCreatePayload): Promise<User> {
+  const body = {
+    email: payload.email,
+    full_name: payload.fullName,
+    role: payload.role,
+    team_id: payload.teamId || null,
+    manager_ids: payload.managerIds,
+    hire_date: payload.hireDate || null,
+    position: payload.position || null,
+    password: payload.password,
+  };
+  const result = await request<BackendUserFull>("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return mapUserFull(result);
+}
+
+export async function updateUser(userId: string, payload: UserUpdatePayload): Promise<User> {
+  const body: Record<string, unknown> = {};
+  if (payload.fullName !== undefined) body.full_name = payload.fullName;
+  if (payload.role !== undefined) body.role = payload.role;
+  if (payload.teamId !== undefined) body.team_id = payload.teamId || null;
+  if (payload.managerIds !== undefined) body.manager_ids = payload.managerIds;
+  if (payload.hireDate !== undefined) body.hire_date = payload.hireDate || null;
+  if (payload.position !== undefined) body.position = payload.position || null;
+  if (payload.isActive !== undefined) body.is_active = payload.isActive;
+  const result = await request<BackendUserFull>(`/admin/users/${userId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+  return mapUserFull(result);
+}
+
+export async function deactivateUser(userId: string): Promise<User> {
+  const result = await request<BackendUserFull>(`/admin/users/${userId}/deactivate`, {
+    method: "PATCH",
+  });
+  return mapUserFull(result);
+}
+
+export async function listAllRequests(filters?: RequestFilters, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
   const params = new URLSearchParams();
   if (filters?.status) params.set("status", filters.status);
   if (filters?.areaId) params.set("team_id", filters.areaId);
   if (filters?.startDate) params.set("start_date", filters.startDate);
   if (filters?.endDate) params.set("end_date", filters.endDate);
+  if (pagination?.page) params.set("page", String(pagination.page));
+  if (pagination?.pageSize) params.set("page_size", String(pagination.pageSize));
   const qs = params.toString() ? `?${params.toString()}` : "";
   const result = await request<BackendVacationRequestList>(`/admin/vacation-requests${qs}`);
-  return result.items.map(mapRequest);
+  return { items: result.items.map(mapRequest), pagination: mapPagination(result.pagination) };
 }
 
 export async function listAllBalances(
-  year: number
-): Promise<(VacationBalance & { userName: string; userArea: string })[]> {
-  const result = await request<BackendBalanceListResponse>(`/admin/vacation-balances?year=${year}`);
-  return result.items.map((b) => ({
-    ...mapBalance(b),
-    userName: b.user_name ?? `Usuario ${b.user_id.slice(0, 8)}`,
-    userArea: b.user_area ?? "—",
-  }));
+  year: number,
+  pagination?: PaginationParams
+): Promise<PaginatedResponse<VacationBalance & { userName: string; userArea: string }>> {
+  const url = appendQS(`/admin/vacation-balances?year=${year}`, paginationQS(pagination));
+  const result = await request<BackendBalanceListResponse>(url);
+  return {
+    items: result.items.map((b) => ({
+      ...mapBalance(b),
+      userName: b.user_name ?? `Usuario ${b.user_id.slice(0, 8)}`,
+      userArea: b.user_area ?? "—",
+    })),
+    pagination: mapPagination(result.pagination),
+  };
 }
 
 export async function listTeams(): Promise<{ id: string; name: string }[]> {
@@ -430,14 +547,7 @@ export async function listTeams(): Promise<{ id: string; name: string }[]> {
 
 export async function listTeamMembers(): Promise<User[]> {
   const result = await request<BackendUserListResponse>("/manager/team/members");
-  return result.items.map((u) => ({
-    id: u.id,
-    fullName: u.full_name,
-    email: u.email,
-    role: mapRole(u.role),
-    area: { id: u.team_id ?? "no-team", name: u.team_name ?? "Sin equipo" },
-    managerId: u.manager_id ?? undefined,
-  }));
+  return result.items.map(mapUserFull);
 }
 
 // ── Notifications ──────────────────────────────────────
@@ -467,9 +577,14 @@ function mapNotification(n: BackendNotification): NotificationEvent {
   };
 }
 
-export async function listMyNotifications(_userId: string): Promise<NotificationEvent[]> {
-  const result = await request<{ items: BackendNotification[]; unread_count: number }>("/notifications/me");
-  return result.items.map(mapNotification);
+export async function listMyNotifications(_userId: string, pagination?: PaginationParams): Promise<PaginatedResponse<NotificationEvent> & { unreadCount: number }> {
+  const url = appendQS("/notifications/me", paginationQS(pagination));
+  const result = await request<{ items: BackendNotification[]; unread_count: number; pagination: BackendPaginationMeta }>(url);
+  return {
+    items: result.items.map(mapNotification),
+    unreadCount: result.unread_count,
+    pagination: mapPagination(result.pagination),
+  };
 }
 
 export async function getUnreadCount(): Promise<number> {
@@ -484,6 +599,32 @@ export async function markNotificationRead(notificationId: string): Promise<void
 export async function markAllNotificationsRead(): Promise<number> {
   const result = await request<{ marked_count: number }>("/notifications/me/read-all", { method: "POST" });
   return result.marked_count;
+}
+
+// ── Calendar ────────────────────────────────────────────
+type BackendCalendarEvent = {
+  request_id: string;
+  employee_id: string;
+  employee_name: string;
+  team_id: string | null;
+  start_date: string;
+  end_date: string;
+  status: string;
+};
+
+export async function getCalendarEvents(month: string, teamId?: string): Promise<CalendarEvent[]> {
+  const params = new URLSearchParams({ month });
+  if (teamId) params.set("team_id", teamId);
+  const result = await request<{ month: string; events: BackendCalendarEvent[] }>(`/calendar/events?${params}`);
+  return result.events.map((e) => ({
+    requestId: e.request_id,
+    employeeId: e.employee_id,
+    employeeName: e.employee_name,
+    teamId: e.team_id ?? undefined,
+    startDate: e.start_date,
+    endDate: e.end_date,
+    status: e.status as CalendarEvent["status"],
+  }));
 }
 
 // ── AI Chat ─────────────────────────────────────────────
@@ -582,5 +723,79 @@ export async function runTeamPolicyAgent(
     applied: result.applied,
     message: result.message,
     policy: result.policy ? mapTeamPolicy(result.policy) : null,
+  };
+}
+
+// ── Day Rollover ──────────────────────────────────────
+export async function triggerRollover(
+  fromYear: number,
+  maxCarryoverDays: number = 10
+): Promise<RolloverResult> {
+  return request<RolloverResult>(
+    `/admin/rollover?from_year=${fromYear}&max_carryover_days=${maxCarryoverDays}`,
+    { method: "POST" }
+  );
+}
+
+// ── Reports (CSV) ─────────────────────────────────────
+export async function exportRequestsReport(
+  startDate: string,
+  endDate: string
+): Promise<string> {
+  const token = getToken();
+  const res = await fetch(
+    `${BASE_URL}/admin/reports/requests?start_date=${startDate}&end_date=${endDate}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+  );
+  if (!res.ok) throw new Error("Error al generar reporte de solicitudes");
+  return res.text();
+}
+
+export async function exportBalancesReport(year: number): Promise<string> {
+  const token = getToken();
+  const res = await fetch(
+    `${BASE_URL}/admin/reports/balances?year=${year}`,
+    { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+  );
+  if (!res.ok) throw new Error("Error al generar reporte de balances");
+  return res.text();
+}
+
+// ── Audit Logs ───────────────────────────────────────────
+type BackendAuditLog = {
+  id: number;
+  actor_user_id: string | null;
+  actor_name: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+export async function listAuditLogs(
+  action?: string,
+  entityType?: string,
+  pagination?: PaginationParams,
+): Promise<PaginatedResponse<AuditLogEntry>> {
+  const params = new URLSearchParams();
+  if (action) params.set("action", action);
+  if (entityType) params.set("entity_type", entityType);
+  if (pagination?.page) params.set("page", String(pagination.page));
+  if (pagination?.pageSize) params.set("page_size", String(pagination.pageSize));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const result = await request<{ items: BackendAuditLog[]; pagination: BackendPaginationMeta }>(`/admin/audit-logs${qs}`);
+  return {
+    items: result.items.map((l) => ({
+      id: l.id,
+      actorUserId: l.actor_user_id,
+      actorName: l.actor_name,
+      action: l.action,
+      entityType: l.entity_type,
+      entityId: l.entity_id,
+      metadata: l.metadata,
+      createdAt: l.created_at,
+    })),
+    pagination: mapPagination(result.pagination),
   };
 }
