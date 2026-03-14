@@ -36,6 +36,7 @@ const ROLE_CONFIG: Record<string, { label: string; color: string; bg: string; bo
   MANAGER: { label: "Manager", color: "text-seekop-700", bg: "bg-seekop-50", border: "border-seekop-200" },
   HR: { label: "Recursos Humanos", color: "text-seekop-700", bg: "bg-seekop-50", border: "border-seekop-200" },
   ADMIN: { label: "Administrador", color: "text-slate-700", bg: "bg-slate-100", border: "border-slate-200" },
+  FINANCE: { label: "Finanzas", color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" },
 };
 
 function generatePassword(length = 10): string {
