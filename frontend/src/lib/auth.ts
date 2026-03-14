@@ -36,6 +36,7 @@ export function dashboardPathForRole(role: User["role"]): string {
     MANAGER: "/manager/dashboard",
     ADMIN: "/admin/dashboard",
     HR: "/hr/dashboard",
+    FINANCE: "/finance/dashboard",
   };
   return map[role] ?? "/employee/dashboard";
 }

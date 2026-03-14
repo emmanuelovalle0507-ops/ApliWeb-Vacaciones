@@ -24,6 +24,9 @@ import type {
   UserCreatePayload,
   UserUpdatePayload,
   AuditLogEntry,
+  ExpenseCategory,
+  ExpenseReceipt,
+  ExpenseReport,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
@@ -170,6 +173,88 @@ type BackendApprovalResponse = {
   };
 };
 
+type BackendExpenseCategory = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+};
+
+type BackendExpenseReceipt = {
+  id: string;
+  expense_report_id: string;
+  uploaded_by: string;
+  category_id?: string | null;
+  original_filename: string;
+  stored_filename: string;
+  storage_path: string;
+  mime_type: string;
+  file_size: number;
+  checksum?: string | null;
+  document_type: string;
+  ocr_status: string;
+  ocr_provider?: string | null;
+  ai_confidence?: number | null;
+  invoice_date?: string | null;
+  issuer_rfc?: string | null;
+  issuer_name?: string | null;
+  folio?: string | null;
+  subtotal: number;
+  iva: number;
+  total: number;
+  currency: string;
+  suggested_category?: string | null;
+  sat_usage?: string | null;
+  payment_method?: string | null;
+  payment_form?: string | null;
+  fiscal_uuid?: string | null;
+  is_validated: boolean;
+  extracted_data?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type BackendExpenseAction = {
+  id: string;
+  expense_report_id: string;
+  expense_receipt_id?: string | null;
+  actor_id: string;
+  actor_role: string;
+  action_type: string;
+  comment?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+type BackendExpenseReport = {
+  id: string;
+  manager_id: string;
+  employee_id?: string | null;
+  team_id?: string | null;
+  vacation_request_id?: string | null;
+  title: string;
+  description?: string | null;
+  report_type: string;
+  expense_date_from?: string | null;
+  expense_date_to?: string | null;
+  currency: string;
+  subtotal: number;
+  tax_total: number;
+  total: number;
+  status: string;
+  submitted_at?: string | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  finance_comment?: string | null;
+  created_at: string;
+  updated_at: string;
+  receipts?: BackendExpenseReceipt[];
+  actions?: BackendExpenseAction[];
+};
+
+type BackendExpenseReportList = { items: BackendExpenseReport[] };
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("vc_token");
@@ -189,7 +274,7 @@ function mapTeamPolicy(policy: BackendTeamPolicy): TeamPolicyOut {
 }
 
 function mapRole(role: string): User["role"] {
-  if (role === "EMPLOYEE" || role === "MANAGER" || role === "ADMIN" || role === "HR") return role;
+  if (role === "EMPLOYEE" || role === "MANAGER" || role === "ADMIN" || role === "HR" || role === "FINANCE") return role;
   return "EMPLOYEE";
 }
 
@@ -209,6 +294,94 @@ function mapUser(summary: BackendUserSummary, fallbackEmail = "usuario@vacacione
       id: summary.team_id ?? "no-team",
       name: teamName,
     },
+  };
+}
+
+function mapExpenseCategory(item: BackendExpenseCategory): ExpenseCategory {
+  return {
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    description: item.description,
+    isActive: item.is_active,
+  };
+}
+
+function mapExpenseReceipt(item: BackendExpenseReceipt): ExpenseReceipt {
+  return {
+    id: item.id,
+    expenseReportId: item.expense_report_id,
+    uploadedBy: item.uploaded_by,
+    categoryId: item.category_id,
+    originalFilename: item.original_filename,
+    storedFilename: item.stored_filename,
+    storagePath: item.storage_path,
+    mimeType: item.mime_type,
+    fileSize: item.file_size,
+    checksum: item.checksum,
+    documentType: item.document_type,
+    ocrStatus: item.ocr_status,
+    ocrProvider: item.ocr_provider,
+    aiConfidence: item.ai_confidence ?? null,
+    invoiceDate: item.invoice_date ?? null,
+    issuerRfc: item.issuer_rfc ?? null,
+    issuerName: item.issuer_name ?? null,
+    folio: item.folio ?? null,
+    subtotal: Number(item.subtotal ?? 0),
+    iva: Number(item.iva ?? 0),
+    total: Number(item.total ?? 0),
+    currency: item.currency,
+    suggestedCategory: item.suggested_category ?? null,
+    satUsage: item.sat_usage ?? null,
+    paymentMethod: item.payment_method ?? null,
+    paymentForm: item.payment_form ?? null,
+    fiscalUuid: item.fiscal_uuid ?? null,
+    isValidated: item.is_validated,
+    extractedData: item.extracted_data ?? null,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+  };
+}
+
+function mapExpenseAction(item: BackendExpenseAction) {
+  return {
+    id: item.id,
+    expenseReportId: item.expense_report_id,
+    expenseReceiptId: item.expense_receipt_id ?? null,
+    actorId: item.actor_id,
+    actorRole: item.actor_role,
+    actionType: item.action_type,
+    comment: item.comment ?? null,
+    metadata: item.metadata ?? null,
+    createdAt: item.created_at,
+  };
+}
+
+function mapExpenseReport(item: BackendExpenseReport): ExpenseReport {
+  return {
+    id: item.id,
+    managerId: item.manager_id,
+    employeeId: item.employee_id ?? null,
+    teamId: item.team_id ?? null,
+    vacationRequestId: item.vacation_request_id ?? null,
+    title: item.title,
+    description: item.description ?? null,
+    reportType: item.report_type,
+    expenseDateFrom: item.expense_date_from ?? null,
+    expenseDateTo: item.expense_date_to ?? null,
+    currency: item.currency,
+    subtotal: Number(item.subtotal ?? 0),
+    taxTotal: Number(item.tax_total ?? 0),
+    total: Number(item.total ?? 0),
+    status: item.status,
+    submittedAt: item.submitted_at ?? null,
+    reviewedAt: item.reviewed_at ?? null,
+    reviewedBy: item.reviewed_by ?? null,
+    financeComment: item.finance_comment ?? null,
+    createdAt: item.created_at,
+    updatedAt: item.updated_at,
+    receipts: (item.receipts ?? []).map(mapExpenseReceipt),
+    actions: (item.actions ?? []).map(mapExpenseAction),
   };
 }
 
@@ -548,6 +721,92 @@ export async function listTeams(): Promise<{ id: string; name: string }[]> {
 export async function listTeamMembers(): Promise<User[]> {
   const result = await request<BackendUserListResponse>("/manager/team/members");
   return result.items.map(mapUserFull);
+}
+
+export async function listExpenseCategories(): Promise<ExpenseCategory[]> {
+  const result = await request<BackendExpenseCategory[]>("/expenses/categories");
+  return result.map(mapExpenseCategory);
+}
+
+export async function listManagerExpenseReports(): Promise<ExpenseReport[]> {
+  const result = await request<BackendExpenseReportList>("/manager/expenses/reports");
+  return result.items.map(mapExpenseReport);
+}
+
+export async function createManagerExpenseReport(payload: {
+  title: string;
+  description?: string;
+  reportType?: string;
+  employeeId?: string;
+  teamId?: string;
+  vacationRequestId?: string;
+  expenseDateFrom?: string;
+  expenseDateTo?: string;
+  currency?: string;
+}): Promise<ExpenseReport> {
+  const result = await request<BackendExpenseReport>("/manager/expenses/reports", {
+    method: "POST",
+    body: JSON.stringify({
+      title: payload.title,
+      description: payload.description,
+      report_type: payload.reportType ?? "GENERAL",
+      employee_id: payload.employeeId ?? null,
+      team_id: payload.teamId ?? null,
+      vacation_request_id: payload.vacationRequestId ?? null,
+      expense_date_from: payload.expenseDateFrom ?? null,
+      expense_date_to: payload.expenseDateTo ?? null,
+      currency: payload.currency ?? "MXN",
+    }),
+  });
+  return mapExpenseReport(result);
+}
+
+export async function listFinanceExpenseReports(status?: string): Promise<ExpenseReport[]> {
+  const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
+  const result = await request<BackendExpenseReportList>(`/finance/expenses/reports${suffix}`);
+  return result.items.map(mapExpenseReport);
+}
+
+export async function financeApproveExpenseReport(reportId: string, comment?: string): Promise<ExpenseReport> {
+  const result = await request<BackendExpenseReport>(`/finance/expenses/reports/${reportId}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ comment: comment ?? null }),
+  });
+  return mapExpenseReport(result);
+}
+
+export async function financeRejectExpenseReport(reportId: string, comment?: string): Promise<ExpenseReport> {
+  const result = await request<BackendExpenseReport>(`/finance/expenses/reports/${reportId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ comment: comment ?? null }),
+  });
+  return mapExpenseReport(result);
+}
+
+export async function financeRequestExpenseCorrection(reportId: string, comment?: string): Promise<ExpenseReport> {
+  const result = await request<BackendExpenseReport>(`/finance/expenses/reports/${reportId}/request-correction`, {
+    method: "POST",
+    body: JSON.stringify({ comment: comment ?? null }),
+  });
+  return mapExpenseReport(result);
+}
+
+export async function uploadExpenseReceipt(reportId: string, file: File, documentType = "INVOICE"): Promise<ExpenseReceipt> {
+  const token = getToken();
+  const form = new FormData();
+  form.append("file", file);
+  form.append("document_type", documentType);
+  const res = await fetch(`${BASE_URL}/manager/expenses/reports/${reportId}/receipts`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : "Error al subir comprobante");
+  }
+  const result = (await res.json()) as BackendExpenseReceipt;
+  return mapExpenseReceipt(result);
 }
 
 // ── Notifications ──────────────────────────────────────

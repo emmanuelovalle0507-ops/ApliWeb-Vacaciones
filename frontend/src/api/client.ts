@@ -74,6 +74,20 @@ export const api = {
     getOnboardingQuestions: impl.getTeamPolicyOnboardingQuestions,
     runAgent: impl.runTeamPolicyAgent,
   },
+  expenses: {
+    categories: { list: impl.listExpenseCategories },
+    manager: {
+      listReports: impl.listManagerExpenseReports,
+      createReport: impl.createManagerExpenseReport,
+      uploadReceipt: impl.uploadExpenseReceipt,
+    },
+    finance: {
+      listReports: impl.listFinanceExpenseReports,
+      approve: impl.financeApproveExpenseReport,
+      reject: impl.financeRejectExpenseReport,
+      requestCorrection: impl.financeRequestExpenseCorrection,
+    },
+  },
 };
 
 export default api;

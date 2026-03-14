@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     smtp_from_name: str = "SEEKOP Vacaciones"
     smtp_from_email: str | None = None
     app_frontend_url: str = "http://localhost:3000"
+    expense_upload_dir: str = "./uploads/expenses"
+    expense_max_file_mb: int = 10
+    expense_allowed_mime: str = "image/jpeg,image/png,application/pdf,text/xml,application/xml"
+    expense_ocr_enabled: bool = False
+    expense_ocr_provider: str = "openai"
+    expense_ocr_model: str = "gpt-4o-mini"
+    expense_auto_analyze: bool = True
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

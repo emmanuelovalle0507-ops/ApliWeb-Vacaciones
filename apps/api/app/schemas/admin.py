@@ -71,7 +71,7 @@ class UserCreateIn(BaseModel):
 class AdminUserCreateIn(BaseModel):
     email: EmailStr
     full_name: str = Field(..., min_length=2, max_length=150)
-    role: str = Field(..., pattern=r"^(EMPLOYEE|MANAGER|ADMIN|HR)$")
+    role: str = Field(..., pattern=r"^(EMPLOYEE|MANAGER|ADMIN|HR|FINANCE)$")
     team_id: str | None = None
     manager_ids: list[str] = Field(default_factory=list)
     hire_date: date | None = None

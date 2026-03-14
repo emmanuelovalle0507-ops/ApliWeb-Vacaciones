@@ -9,6 +9,7 @@ import {
   CalendarDays,
   LayoutDashboard,
   LogOut,
+  Receipt,
   Shield,
   UserCircle,
   X,
@@ -21,6 +22,7 @@ import type { UserRole, NavItem } from "@/types";
 const ICON_MAP: Record<string, LucideIcon> = {
   LayoutDashboard,
   CalendarDays,
+  Receipt,
   Shield,
   UserCircle,
 };
@@ -33,14 +35,21 @@ const NAV_CONFIG: Record<UserRole, NavItem[]> = {
   MANAGER: [
     { label: "Dashboard Manager", href: "/manager/dashboard", icon: "LayoutDashboard" },
     { label: "Mis Vacaciones", href: "/employee/dashboard", icon: "CalendarDays" },
+    { label: "Viáticos", href: "/manager/expenses", icon: "Receipt" },
     { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
   ADMIN: [
     { label: "Panel Admin", href: "/admin/dashboard", icon: "LayoutDashboard" },
+    { label: "Gastos", href: "/admin/expenses", icon: "Receipt" },
     { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
   HR: [
     { label: "Panel RRHH", href: "/hr/dashboard", icon: "LayoutDashboard" },
+    { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
+  ],
+  FINANCE: [
+    { label: "Panel Finanzas", href: "/finance/dashboard", icon: "LayoutDashboard" },
+    { label: "Revisión de gastos", href: "/finance/expenses", icon: "Receipt" },
     { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
 };
@@ -50,6 +59,7 @@ const ROLE_LABEL: Record<string, string> = {
   MANAGER: "Manager",
   EMPLOYEE: "Empleado",
   HR: "RRHH",
+  FINANCE: "Finanzas",
 };
 
 interface SidebarProps {

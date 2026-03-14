@@ -51,12 +51,14 @@ export function RoleBadge({ role }: { role: string }) {
     MANAGER: "bg-seekop-100 text-seekop-800 border-seekop-200",
     EMPLOYEE: "bg-[#9ab236]/15 text-[#6f8425] border-[#9ab236]/30",
     HR: "bg-seekop-50 text-seekop-700 border-seekop-200",
+    FINANCE: "bg-emerald-100 text-emerald-800 border-emerald-200",
   };
   const labels: Record<string, string> = {
     ADMIN: "Admin",
     MANAGER: "Manager",
     EMPLOYEE: "Empleado",
     HR: "RRHH",
+    FINANCE: "Finanzas",
   };
   return (
     <span

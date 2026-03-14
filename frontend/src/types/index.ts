@@ -1,5 +1,5 @@
 // ── Enums ──────────────────────────────────────────────
-export type UserRole = "EMPLOYEE" | "MANAGER" | "ADMIN" | "HR";
+export type UserRole = "EMPLOYEE" | "MANAGER" | "ADMIN" | "HR" | "FINANCE";
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELED";
 export type NotificationType =
   | "REQUEST_CREATED"
@@ -9,7 +9,7 @@ export type NotificationType =
   | "POLICY_UPDATED";
 export type EmailStatus = "PENDING" | "SENT" | "FAILED" | "SKIPPED";
 
-export const USER_ROLES: UserRole[] = ["EMPLOYEE", "MANAGER", "ADMIN", "HR"];
+export const USER_ROLES: UserRole[] = ["EMPLOYEE", "MANAGER", "ADMIN", "HR", "FINANCE"];
 export const REQUEST_STATUSES: RequestStatus[] = ["PENDING", "APPROVED", "REJECTED", "CANCELED"];
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -17,6 +17,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   MANAGER: "Manager",
   ADMIN: "Administrador",
   HR: "Recursos Humanos",
+  FINANCE: "Finanzas",
 };
 
 export const STATUS_LABELS: Record<RequestStatus, string> = {
@@ -116,6 +117,86 @@ export interface TeamPolicyOut {
   effectiveTo?: string | null;
   createdBy?: string | null;
   createdAt: string;
+}
+
+export interface ExpenseCategory {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+}
+
+export interface ExpenseReceipt {
+  id: string;
+  expenseReportId: string;
+  uploadedBy: string;
+  categoryId?: string | null;
+  originalFilename: string;
+  storedFilename: string;
+  storagePath: string;
+  mimeType: string;
+  fileSize: number;
+  checksum?: string | null;
+  documentType: string;
+  ocrStatus: string;
+  ocrProvider?: string | null;
+  aiConfidence?: number | null;
+  invoiceDate?: string | null;
+  issuerRfc?: string | null;
+  issuerName?: string | null;
+  folio?: string | null;
+  subtotal: number;
+  iva: number;
+  total: number;
+  currency: string;
+  suggestedCategory?: string | null;
+  satUsage?: string | null;
+  paymentMethod?: string | null;
+  paymentForm?: string | null;
+  fiscalUuid?: string | null;
+  isValidated: boolean;
+  extractedData?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExpenseAction {
+  id: string;
+  expenseReportId: string;
+  expenseReceiptId?: string | null;
+  actorId: string;
+  actorRole: string;
+  actionType: string;
+  comment?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface ExpenseReport {
+  id: string;
+  managerId: string;
+  employeeId?: string | null;
+  teamId?: string | null;
+  vacationRequestId?: string | null;
+  title: string;
+  description?: string | null;
+  reportType: string;
+  expenseDateFrom?: string | null;
+  expenseDateTo?: string | null;
+  currency: string;
+  subtotal: number;
+  taxTotal: number;
+  total: number;
+  status: string;
+  submittedAt?: string | null;
+  reviewedAt?: string | null;
+  reviewedBy?: string | null;
+  financeComment?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  receipts: ExpenseReceipt[];
+  actions: ExpenseAction[];
 }
 
 export interface TeamPolicyOnboardingQuestionsResponse {
