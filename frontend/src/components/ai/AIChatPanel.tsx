@@ -54,6 +54,16 @@ const ROLE_CONFIG: Record<UserRole, {
     ],
     color: "seekop",
   },
+  FINANCE: {
+    placeholder: "Consulta el estado de reportes, revisión financiera y flujo de viáticos...",
+    chips: [
+      "¿Cuántos reportes pendientes hay?",
+      "Muéstrame el estado general de gastos",
+      "¿Qué reportes necesitan corrección?",
+      "Resumen operativo de revisión",
+    ],
+    color: "seekop",
+  },
 };
 
 // ── Utility: clean raw tool prefixes from answers ───────────
@@ -73,6 +83,7 @@ function TypingIndicator({ role }: { role: UserRole }) {
     MANAGER: 'Consultando tu equipo y solicitudes...',
     HR: 'Analizando empleados, balances y solicitudes...',
     EMPLOYEE: 'Consultando tu saldo y tus solicitudes...',
+    FINANCE: 'Revisando flujo financiero y reportes de gastos...',
   };
 
   return (
@@ -318,6 +329,7 @@ export default function AIChatPanel({ title = "Asistente IA" }: AIChatPanelProps
               {role === 'MANAGER' && 'Puedo ayudarte con pendientes, disponibilidad y estado operativo de tu equipo.'}
               {role === 'HR' && 'Puedo ayudarte con consultas globales de empleados, balances, disponibilidad y solicitudes.'}
               {role === 'EMPLOYEE' && 'Puedo ayudarte con tu saldo, tus solicitudes y reglas generales de vacaciones.'}
+              {role === 'FINANCE' && 'Puedo ayudarte a revisar el estado operativo del flujo de gastos y viáticos.'}
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               {config.chips.map((chip) => (

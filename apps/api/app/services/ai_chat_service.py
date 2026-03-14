@@ -123,6 +123,13 @@ ROLE_PROMPTS: dict[str, str] = {
         "NUNCA debe poder realizar acciones: no aprobar, no rechazar, no ajustar saldos.\n"
         "Si pide realizar una acción, responde que su rol es solo de consulta."
     ),
+    "FINANCE": (
+        _BASE_SYSTEM + "\n\n"
+        "El usuario es de FINANZAS con foco en revisión de viáticos y gastos.\n"
+        "Puede consultar información operativa y global relacionada con reportes, revisión y seguimiento.\n"
+        "No inventes datos de gastos si todavía no existen herramientas específicas para responderlos.\n"
+        "Si te piden aprobar o rechazar desde el chat, responde con guía breve sin afirmar acciones no ejecutadas."
+    ),
 }
 
 
