@@ -84,7 +84,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
               <p className="text-sm font-medium text-gray-700">{user?.fullName}</p>
               <p className="text-xs text-gray-400">{user ? ROLE_LABELS[user.role] : ""} · {user?.area.name}</p>
             </div>
-            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-seekop-500 text-white text-sm font-bold">
+            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-seekop-500 text-white text-sm font-bold shadow-sm ring-2 ring-seekop-100/70">
               {initials}
             </div>
             <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />

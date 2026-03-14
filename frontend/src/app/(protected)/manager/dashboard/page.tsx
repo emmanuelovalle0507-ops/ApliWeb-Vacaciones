@@ -168,7 +168,7 @@ export default function ManagerDashboardPage() {
                   className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                     historyFilter === opt.value
                       ? "bg-seekop-500 text-white shadow-sm"
-                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      : "bg-gray-100 text-gray-600 hover:bg-seekop-50 hover:text-seekop-700"
                   }`}
                 >
                   {opt.label}

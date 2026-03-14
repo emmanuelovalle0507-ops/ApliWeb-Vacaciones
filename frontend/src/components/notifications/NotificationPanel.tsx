@@ -126,7 +126,7 @@ export default function NotificationPanel() {
       {/* Bell button */}
       <button
         onClick={() => setOpen((prev) => !prev)}
-        className="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+        className="relative p-2 rounded-lg text-gray-500 hover:bg-seekop-50 hover:text-seekop-700 transition-colors"
         aria-label="Notificaciones"
       >
         <Bell size={20} />
@@ -148,7 +148,7 @@ export default function NotificationPanel() {
                 <button
                   onClick={() => markAllMut.mutate()}
                   disabled={markAllMut.isPending}
-                  className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-seekop-600 hover:bg-seekop-50 rounded-md transition-colors disabled:opacity-50"
                 >
                   <CheckCheck size={14} />
                   Marcar todo leído
@@ -156,7 +156,7 @@ export default function NotificationPanel() {
               )}
               <button
                 onClick={() => setOpen(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                className="p-1 text-gray-400 hover:text-seekop-700 rounded"
               >
                 <X size={16} />
               </button>

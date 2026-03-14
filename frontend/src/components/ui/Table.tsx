@@ -30,14 +30,14 @@ export default function Table<T>({
   onRetry,
 }: TableProps<T>) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
+    <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white shadow-sm">
+      <table className="min-w-full divide-y divide-slate-200/80">
+        <thead className="bg-slate-50/80">
           <tr>
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider ${col.className ?? ""}`}
+                className={`px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider ${col.className ?? ""}`}
               >
                 {col.header}
               </th>
@@ -86,7 +86,7 @@ export default function Table<T>({
             </tr>
           ) : (
             data.map((row, idx) => (
-              <tr key={idx} className="hover:bg-gray-50 transition-colors">
+              <tr key={idx} className="hover:bg-seekop-50/60 transition-colors">
                 {columns.map((col) => (
                   <td key={col.key} className={`px-6 py-4 whitespace-nowrap text-sm text-gray-700 ${col.className ?? ""}`}>
                     {col.render

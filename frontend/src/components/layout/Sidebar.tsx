@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -80,13 +81,20 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       >
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-5 border-b border-slate-700/50">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/10 border border-white/20">
-              <span className="font-black text-white text-sm">S</span>
+          <Link href="/" className="flex items-center gap-3 min-w-0 group">
+            <div className="flex items-center justify-center h-10 px-2 rounded-xl bg-white/95 ring-1 ring-white/10 shadow-sm overflow-hidden shrink-0 transition-transform duration-200 group-hover:scale-[1.02]">
+              <Image
+                src="/branding/seekop-logo.png"
+                alt="Seekop Consulting"
+                width={108}
+                height={30}
+                className="w-auto h-6 object-contain"
+                priority
+              />
             </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-extrabold text-white tracking-widest">SEEKOP</span>
-              <span className="text-[9px] font-semibold text-seekop-400 -mt-0.5 tracking-[0.2em] uppercase">Consulting</span>
+            <div className="flex flex-col min-w-0 leading-tight">
+              <span className="text-xs font-semibold text-white/90 tracking-[0.22em] uppercase truncate">Seekop</span>
+              <span className="text-[10px] font-medium text-slate-400 truncate">Vacation Control</span>
             </div>
           </Link>
           <button onClick={onClose} className="lg:hidden text-slate-400 hover:text-white">
@@ -105,7 +113,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                 onClick={onClose}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-seekop-500/15 text-seekop-400 border-l-2 border-seekop-400"
+                    ? "bg-seekop-500/18 text-white border-l-2 border-[#9ab236] shadow-[inset_0_0_0_1px_rgba(154,178,54,0.18)]"
                     : "text-slate-300 hover:bg-slate-800 hover:text-white"
                 }`}
               >
@@ -119,7 +127,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
         {/* User info + logout */}
         <div className="border-t border-slate-700/50 p-4">
           <div className="mb-3 flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-seekop-500/20 text-seekop-400 text-sm font-bold shrink-0">
+            <div className="flex items-center justify-center w-9 h-9 rounded-full bg-seekop-500/20 text-[#9ab236] ring-1 ring-[#9ab236]/20 text-sm font-bold shrink-0">
               {user.fullName.split(" ").map(n => n[0]).join("").slice(0, 2)}
             </div>
             <div className="min-w-0">

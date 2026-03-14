@@ -32,10 +32,10 @@ interface UserFormModalProps {
 }
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  EMPLOYEE: { label: "Empleado", color: "text-seekop-700", bg: "bg-seekop-50", border: "border-seekop-200" },
-  MANAGER: { label: "Manager", color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" },
-  HR: { label: "Recursos Humanos", color: "text-teal-700", bg: "bg-teal-50", border: "border-teal-200" },
-  ADMIN: { label: "Administrador", color: "text-purple-700", bg: "bg-purple-50", border: "border-purple-200" },
+  EMPLOYEE: { label: "Empleado", color: "text-[#6f8425]", bg: "bg-[#9ab236]/15", border: "border-[#9ab236]/30" },
+  MANAGER: { label: "Manager", color: "text-seekop-700", bg: "bg-seekop-50", border: "border-seekop-200" },
+  HR: { label: "Recursos Humanos", color: "text-seekop-700", bg: "bg-seekop-50", border: "border-seekop-200" },
+  ADMIN: { label: "Administrador", color: "text-slate-700", bg: "bg-slate-100", border: "border-slate-200" },
 };
 
 function generatePassword(length = 10): string {

@@ -20,8 +20,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         <input
           ref={ref}
           id={inputId}
-          className={`w-full px-4 py-2.5 border rounded-lg text-sm outline-none transition-colors focus:ring-2 focus:ring-seekop-400 focus:border-seekop-500 ${
-            error ? "border-red-300 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
+          className={`w-full px-4 py-2.5 border rounded-lg text-sm outline-none transition-colors bg-white focus:ring-2 focus:ring-seekop-300 focus:border-seekop-500 ${
+            error ? "border-red-300 focus:ring-red-500 focus:border-red-500" : "border-gray-300 hover:border-seekop-200"
           } ${className}`}
           {...props}
         />

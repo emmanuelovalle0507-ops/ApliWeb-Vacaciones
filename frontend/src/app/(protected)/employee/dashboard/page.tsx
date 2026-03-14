@@ -83,7 +83,7 @@ export default function EmployeeDashboardPage() {
               Resumen de tus vacaciones y solicitudes
             </p>
           </div>
-          <Button onClick={() => setShowForm(!showForm)}>
+          <Button onClick={() => setShowForm(!showForm)} className="shadow-sm">
             <PlusCircle size={18} className="mr-2" />
             {showForm ? "Cerrar formulario" : "Nueva Solicitud"}
           </Button>

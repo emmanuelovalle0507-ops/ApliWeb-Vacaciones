@@ -143,7 +143,7 @@ export default function ProfilePage() {
                 <span className="inline-flex items-center gap-1.5 text-sm text-gray-500">
                   <Mail size={14} /> {user.email}
                 </span>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-semibold bg-seekop-50 text-seekop-700 rounded-full border border-seekop-100">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-semibold bg-seekop-50 text-seekop-700 rounded-full border border-seekop-200">
                   <Shield size={12} /> {ROLE_LABELS[user.role]}
                 </span>
               </div>

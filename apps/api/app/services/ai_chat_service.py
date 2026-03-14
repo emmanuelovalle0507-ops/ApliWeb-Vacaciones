@@ -5,7 +5,7 @@ import re
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 from threading import Lock
 from uuid import UUID
 
@@ -69,6 +69,10 @@ DOMAIN_HINT = (
     "(equipos, solicitudes, disponibilidad, aprobaciones, rechazos, saldos y políticas)."
 )
 
+GREETING_PATTERNS = {
+    "hola", "hi", "hello", "buenas", "buen día", "buen dia", "hey"
+}
+
 _BASE_SYSTEM = (
     "Eres un asistente de gestión de vacaciones corporativo. "
     "Respondes SOLO sobre la aplicación de vacaciones: solicitudes, saldos, aprobaciones, rechazos, "
@@ -131,6 +135,30 @@ class AIAnswer:
 
 
 class AIChatService:
+    def _extract_timeframe(self, question: str) -> dict:
+        q = question.lower()
+        today = date.today()
+        if 'mañana' in q or 'manana' in q:
+            return {'start_date': today + timedelta(days=1), 'end_date': today + timedelta(days=1), 'label': 'mañana'}
+        if 'próxima semana' in q or 'proxima semana' in q:
+            start = today + timedelta(days=(7 - today.weekday()))
+            end = start + timedelta(days=6)
+            return {'start_date': start, 'end_date': end, 'label': 'próxima semana'}
+        if 'esta semana' in q:
+            start = today - timedelta(days=today.weekday())
+            end = start + timedelta(days=6)
+            return {'start_date': start, 'end_date': end, 'label': 'esta semana'}
+        if 'este mes' in q:
+            start = today.replace(day=1)
+            if today.month == 12:
+                next_month = today.replace(year=today.year + 1, month=1, day=1)
+            else:
+                next_month = today.replace(month=today.month + 1, day=1)
+            end = next_month - timedelta(days=1)
+            return {'start_date': start, 'end_date': end, 'label': 'este mes'}
+        if 'hoy' in q:
+            return {'start_date': today, 'end_date': today, 'label': 'hoy'}
+        return {}
     def __init__(self, db: Session) -> None:
         self.db = db
         self.chat_repo = AIChatRepository(db)
@@ -160,34 +188,55 @@ class AIChatService:
         q = question.lower()
         available = get_tool_names_for_role(role)
         selected: list[str] = []
+        timeframe = self._extract_timeframe(question)
 
-        # Smart tool selection based on question content
-        if any(k in q for k in ["saldo", "balance", "días", "dias", "disponible", "quedan"]):
+        if any(k in q for k in ["disponible", "disponibles", "libre", "libres"]):
+            if timeframe and "list_people_out_in_range" in available:
+                selected.append("list_people_out_in_range")
+            elif "list_people_available_today" in available:
+                selected.append("list_people_available_today")
+        if any(k in q for k in ["fuera", "vacaciones hoy", "salió de vacaciones", "salieron de vacaciones", "ausente", "ausentes", "sale", "salen", "se va", "se van"]):
+            if timeframe and "list_people_out_in_range" in available:
+                selected.append("list_people_out_in_range")
+            elif "list_people_out_today" in available:
+                selected.append("list_people_out_today")
+        if any(k in q for k in ["regresa", "regresan", "vuelve", "vuelven", "regresando"]):
+            if "list_people_returning_soon" in available:
+                selected.append("list_people_returning_soon")
+        if any(k in q for k in ["pendiente", "pendientes", "solicitudes pendientes"]):
+            if "list_pending_requests_summary" in available:
+                selected.append("list_pending_requests_summary")
+        if any(k in q for k in ["saldo", "balance", "días", "dias", "quedan"]):
             if "get_my_balance" in available:
                 selected.append("get_my_balance")
         if any(k in q for k in ["mis solicitud", "mi solicitud", "mis vacacion", "estado de mi"]):
             if "list_my_requests" in available:
                 selected.append("list_my_requests")
-        if any(k in q for k in ["equipo", "pendiente", "team", "mi equipo"]):
+        if any(k in q for k in ["equipo", "team", "mi equipo"]):
             if "list_team_requests" in available:
                 selected.append("list_team_requests")
             if "get_team_summary" in available:
                 selected.append("get_team_summary")
             if "list_team_members" in available:
                 selected.append("list_team_members")
-        if any(k in q for k in ["global", "organización", "organizacion", "todos", "general", "resumen"]):
+        if any(k in q for k in ["global", "organización", "organizacion", "todos", "general", "resumen", "ejecutivo"]):
             if "list_global_requests" in available:
                 selected.append("list_global_requests")
             if "get_global_summary" in available:
                 selected.append("get_global_summary")
             if "list_employees" in available:
                 selected.append("list_employees")
+        if any(k in q for k in ["saldo bajo", "saldos bajos", "bajo saldo", "crítico", "critico"]):
+            if "list_low_balance_people" in available:
+                selected.append("list_low_balance_people")
+            if "get_global_summary" in available:
+                selected.append("get_global_summary")
         if any(k in q for k in ["empleado", "usuario", "persona", "miembro", "listado"]):
             if "list_employees" in available:
                 selected.append("list_employees")
             if "list_team_members" in available:
                 selected.append("list_team_members")
-        if any(k in q for k in ["aprob", "rechaz", "pendiente", "solicitud"]):
+        if any(k in q for k in ["aprob", "rechaz", "solicitud"]):
             if "list_team_requests" in available:
                 selected.append("list_team_requests")
             if "list_global_requests" in available:
@@ -195,26 +244,44 @@ class AIChatService:
         if any(k in q for k in ["política", "politica", "regla", "anticipación", "anticipacion", "capacidad"]):
             if "get_policies_by_area" in available:
                 selected.append("get_policies_by_area")
+        if any(k in q for k in ["por equipo", "equipos", "todas las políticas", "todas las politicas"]):
+            if "get_policies_by_area" in available:
+                selected.append("get_policies_by_area")
 
-        # Fallback: if nothing matched, use summary tools
         if not selected:
             if role == "EMPLOYEE":
                 selected = [t for t in ["get_my_balance", "list_my_requests"] if t in available]
             elif role == "MANAGER":
-                selected = [t for t in ["get_team_summary", "list_team_requests"] if t in available]
+                selected = [t for t in ["get_team_summary", "list_pending_requests_summary"] if t in available]
             else:
-                selected = [t for t in ["get_global_summary"] if t in available]
+                selected = [t for t in ["get_global_summary", "list_pending_requests_summary"] if t in available]
 
-        return list(dict.fromkeys(selected))  # dedupe preserving order
+        return list(dict.fromkeys(selected))
 
-    def _execute_tools(self, tool_names: list[str], role: str, user_id: str, team_id: str | None) -> list[ToolResult]:
+    def _execute_tools(self, tool_names: list[str], role: str, user_id: str, team_id: str | None, question: str) -> list[ToolResult]:
         results: list[ToolResult] = []
+        timeframe = self._extract_timeframe(question)
+        q = question.lower()
         for name in tool_names[:4]:  # max 4 tools per request
+            kwargs = {}
+            if name == 'get_my_balance':
+                kwargs['year'] = datetime.now(timezone.utc).year
+            if name == 'list_people_out_in_range':
+                if timeframe:
+                    kwargs.update({k: timeframe[k] for k in ['start_date', 'end_date'] if k in timeframe})
+            if name == 'list_people_returning_soon':
+                if 'este mes' in q:
+                    kwargs['days'] = 30
+                elif 'próxima semana' in q or 'proxima semana' in q:
+                    kwargs['days'] = 14
+                else:
+                    kwargs['days'] = 7
             result = self.tool_executor.execute(
                 tool_name=name,
                 role=role,
                 user_id=user_id,
                 team_id=team_id,
+                **kwargs,
             )
             results.append(result)
         return results
@@ -229,27 +296,53 @@ class AIChatService:
         return "\n".join(parts)
 
     def _build_friendly_answer(self, tool_results: list[ToolResult], question: str) -> str:
-        """Clean, professional, human-readable answer for when LLM is unavailable."""
-        if not tool_results or not any(tr.record_count > 0 for tr in tool_results):
+        if not tool_results:
             return (
-                "Gracias por tu consulta. En este momento no cuento con datos "
-                "específicos para responder. Por favor intenta reformular tu pregunta "
-                "o consulta directamente en la sección correspondiente de la aplicación."
+                "No encontré datos suficientes para responder esa consulta dentro de la aplicación de vacaciones. "
+                "Intenta preguntar por solicitudes, saldos, disponibilidad, aprobaciones, equipos o políticas."
             )
 
-        parts = []
-        for tr in tool_results:
-            if tr.record_count > 0:
-                parts.append(tr.data)
+        if not any(tr.record_count > 0 for tr in tool_results):
+            joined = ' '.join(tr.data for tr in tool_results if tr.data).strip()
+            if joined:
+                return joined
+            return (
+                "No encontré datos suficientes para responder esa consulta dentro de la aplicación de vacaciones. "
+                "Intenta preguntar por solicitudes, saldos, disponibilidad, aprobaciones, equipos o políticas."
+            )
 
-        greeting = "Aquí tienes la información solicitada:\n\n"
-        body = "\n\n".join(parts)
-        footer = "\n\n¿Necesitas algo más? Escribe tu pregunta."
+        total_records = sum(tr.record_count for tr in tool_results if tr.record_count)
+        meaningful = [tr.data for tr in tool_results if tr.record_count > 0]
+        summary = meaningful[0]
+        extra = meaningful[1:3]
 
-        return f"{greeting}{body}{footer}"
+        parts = [f"Resumen\n{summary}"]
+        if extra:
+            parts.append("Detalle\n" + "\n\n".join(extra))
+        if total_records > 0:
+            parts.append(f"Hallazgo\nSe encontraron {total_records} registros relevantes para tu consulta.")
+        return "\n\n".join(parts)
 
     def ask(self, actor_id: str, question: str) -> AIAnswer:
         start_time = time.time()
+        question = question.strip()
+
+        if not question:
+            return AIAnswer(
+                answer=DOMAIN_HINT,
+                scope="EMPTY",
+                tool_results_used=[],
+            )
+
+        if question.lower() in GREETING_PATTERNS:
+            return AIAnswer(
+                answer=(
+                    "Hola. Puedo ayudarte solo con consultas sobre la aplicación de vacaciones: "
+                    "solicitudes, saldos, disponibilidad, aprobaciones, rechazos, equipos y políticas."
+                ),
+                scope="GREETING",
+                tool_results_used=[],
+            )
 
         # Rate limiting
         if not _check_rate_limit(actor_id):
@@ -271,7 +364,7 @@ class AIChatService:
 
         # Select and execute tools
         tool_names = self._select_tools(role, question)
-        tool_results = self._execute_tools(tool_names, role, actor_id, team_id)
+        tool_results = self._execute_tools(tool_names, role, actor_id, team_id, question)
         context = self._build_context_from_tools(tool_results)
         tools_used = [tr.tool_name for tr in tool_results]
 
@@ -283,20 +376,34 @@ class AIChatService:
         # Build user message with context
         user_message = (
             f"Datos del sistema (consulta real, NO inventar otros):\n{context}\n\n"
-            f"Pregunta del usuario: {question}"
+            f"Pregunta del usuario: {question}\n\n"
+            "Instrucciones de respuesta: si el contexto ya contiene la respuesta, contesta usando SOLO ese contexto. "
+            "No digas que faltan datos si el contexto ya trae nombres, conteos o saldos. "
+            "Para ADMIN y HR prioriza respuestas ejecutivas con bullets y hallazgos concretos."
         )
 
-        # Call LLM
-        llm_answer = self.llm.chat_with_role(
-            system_prompt=system_prompt,
-            user_message=user_message,
-        )
+        # Direct answer for high-confidence operational queries
+        direct_operational_terms = [
+            'esta semana', 'próxima semana', 'proxima semana', 'hoy', 'mañana', 'manana',
+            'quién sale', 'quien sale', 'quién se va', 'quien se va', 'quién está disponible', 'quien esta disponible',
+            'quién regresa', 'quien regresa', 'saldo bajo', 'saldos bajos'
+        ]
+        use_direct_answer = any(term in question.lower() for term in direct_operational_terms) and bool(tool_results)
 
-        # Fallback if LLM fails or is disabled
-        if not llm_answer:
+        if use_direct_answer:
             answer = self._build_friendly_answer(tool_results, question)
         else:
-            answer = llm_answer
+            # Call LLM
+            llm_answer = self.llm.chat_with_role(
+                system_prompt=system_prompt,
+                user_message=user_message,
+            )
+
+            # Fallback if LLM fails or is disabled
+            if not llm_answer:
+                answer = self._build_friendly_answer(tool_results, question)
+            else:
+                answer = llm_answer
 
         elapsed_ms = int((time.time() - start_time) * 1000)
 

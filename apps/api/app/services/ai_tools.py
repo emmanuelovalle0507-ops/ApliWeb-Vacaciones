@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -43,6 +43,42 @@ class ToolDef:
 # ── Tool Registry ──────────────────────────────────────────────
 
 TOOL_DEFINITIONS: list[ToolDef] = [
+    ToolDef(
+        name="list_people_out_today",
+        description="Lista personas que están fuera hoy por vacaciones aprobadas.",
+        allowed_roles={"MANAGER", "ADMIN", "HR"},
+        parameters=[],
+    ),
+    ToolDef(
+        name="list_people_available_today",
+        description="Lista personas disponibles hoy (no están de vacaciones aprobadas).",
+        allowed_roles={"MANAGER", "ADMIN", "HR"},
+        parameters=[],
+    ),
+    ToolDef(
+        name="list_pending_requests_summary",
+        description="Resume solicitudes pendientes con foco operativo.",
+        allowed_roles={"MANAGER", "ADMIN", "HR"},
+        parameters=[],
+    ),
+    ToolDef(
+        name="list_people_out_in_range",
+        description="Lista personas fuera en un rango de fechas.",
+        allowed_roles={"MANAGER", "ADMIN", "HR"},
+        parameters=[{"name": "start_date", "type": "date", "description": "Fecha inicial"}, {"name": "end_date", "type": "date", "description": "Fecha final"}],
+    ),
+    ToolDef(
+        name="list_people_returning_soon",
+        description="Lista personas que regresan pronto de vacaciones.",
+        allowed_roles={"MANAGER", "ADMIN", "HR"},
+        parameters=[{"name": "days", "type": "int", "description": "Ventana en días"}],
+    ),
+    ToolDef(
+        name="list_low_balance_people",
+        description="Lista personas con saldo crítico o bajo.",
+        allowed_roles={"ADMIN", "HR", "MANAGER"},
+        parameters=[],
+    ),
     ToolDef(
         name="get_my_balance",
         description="Obtiene el saldo de vacaciones del usuario actual (días disponibles, usados, otorgados).",
@@ -124,6 +160,18 @@ class AIToolExecutor:
         stmt = select(Team.name).where(Team.id == str(team_id))
         name = self.db.execute(stmt).scalar_one_or_none()
         return name or "Sin equipo"
+
+    def _normalize_range(self, start_date: date | None = None, end_date: date | None = None, days: int | None = None) -> tuple[date, date]:
+        start = start_date or self._today()
+        if end_date:
+            end = end_date
+        elif days:
+            end = start + timedelta(days=max(days - 1, 0))
+        else:
+            end = start
+        if end < start:
+            start, end = end, start
+        return start, end
 
     # ── get_my_balance ─────────────────────────────────
     def get_my_balance(self, user_id: str, year: int | None = None) -> ToolResult:
@@ -261,10 +309,15 @@ class AIToolExecutor:
         )
 
     # ── list_team_members ──────────────────────────────
-    def list_team_members(self, manager_id: str) -> ToolResult:
+    def list_team_members(self, manager_id: str, team_id: str | None = None) -> ToolResult:
         stmt = (
             select(User)
-            .where(User.manager_id == manager_id, User.is_active.is_(True))
+            .where(
+                User.is_active.is_(True),
+                User.manager_id == manager_id,
+                User.role.in_([UserRole.EMPLOYEE, UserRole.MANAGER]),
+                User.id != manager_id,
+            )
             .order_by(User.full_name)
         )
         members = list(self.db.execute(stmt).scalars().all())
@@ -278,18 +331,179 @@ class AIToolExecutor:
             record_count=len(members),
         )
 
+    # ── list_people_out_today ──────────────────────────
+    def list_people_out_today(self, team_id: str | None = None, manager_id: str | None = None) -> ToolResult:
+        today = self._today()
+        filters = [
+            VacationRequest.status == VacationRequestStatus.APPROVED,
+            VacationRequest.start_date <= today,
+            VacationRequest.end_date >= today,
+        ]
+        if team_id:
+            filters.append(VacationRequest.team_id == team_id)
+        elif manager_id:
+            filters.append(VacationRequest.manager_id == manager_id)
+
+        emp_alias = aliased(User)
+        stmt = (
+            select(VacationRequest, emp_alias.full_name)
+            .join(emp_alias, emp_alias.id == VacationRequest.employee_id)
+            .where(*filters)
+            .order_by(emp_alias.full_name.asc())
+        )
+        rows = self.db.execute(stmt).all()
+        if not rows:
+            return ToolResult(tool_name="list_people_out_today", data="No hay personas fuera hoy.")
+
+        lines = [f"• {name}: {req.start_date} a {req.end_date} ({req.requested_days:.0f}d)" for req, name in rows]
+        return ToolResult(
+            tool_name="list_people_out_today",
+            data=f"Personas fuera hoy ({len(rows)}):\n" + "\n".join(lines),
+            record_count=len(rows),
+        )
+
+    # ── list_people_available_today ────────────────────
+    def list_people_available_today(self, team_id: str | None = None, manager_id: str | None = None) -> ToolResult:
+        today = self._today()
+        user_filters = [User.is_active.is_(True), User.role.in_([UserRole.EMPLOYEE, UserRole.MANAGER])]
+        if manager_id:
+            user_filters.append(User.manager_id == manager_id)
+        elif team_id:
+            user_filters.append(User.team_id == team_id)
+
+        users = list(self.db.execute(select(User).where(*user_filters).order_by(User.full_name.asc())).scalars().all())
+        if not users:
+            return ToolResult(tool_name="list_people_available_today", data="No hay personas disponibles para mostrar.")
+
+        out_stmt = select(VacationRequest.employee_id).where(
+            VacationRequest.status == VacationRequestStatus.APPROVED,
+            VacationRequest.start_date <= today,
+            VacationRequest.end_date >= today,
+        )
+        if team_id:
+            out_stmt = out_stmt.where(VacationRequest.team_id == team_id)
+        elif manager_id:
+            out_stmt = out_stmt.where(VacationRequest.manager_id == manager_id)
+        out_ids = {str(x) for x in self.db.execute(out_stmt).scalars().all()}
+
+        available = [u for u in users if str(u.id) not in out_ids]
+        if not available:
+            return ToolResult(tool_name="list_people_available_today", data="No hay personas disponibles hoy.")
+
+        lines = [f"• {u.full_name} — {u.role.value}" for u in available[:20]]
+        return ToolResult(
+            tool_name="list_people_available_today",
+            data=f"Personas disponibles hoy ({len(available)}):\n" + "\n".join(lines),
+            record_count=len(available),
+        )
+
+    # ── list_pending_requests_summary ──────────────────
+    def list_pending_requests_summary(self, team_id: str | None = None, manager_id: str | None = None) -> ToolResult:
+        filters = [VacationRequest.status == VacationRequestStatus.PENDING]
+        if team_id:
+            filters.append(VacationRequest.team_id == team_id)
+        elif manager_id:
+            filters.append(VacationRequest.manager_id == manager_id)
+
+        emp_alias = aliased(User)
+        stmt = (
+            select(VacationRequest, emp_alias.full_name)
+            .join(emp_alias, emp_alias.id == VacationRequest.employee_id)
+            .where(*filters)
+            .order_by(VacationRequest.created_at.asc())
+            .limit(10)
+        )
+        rows = self.db.execute(stmt).all()
+        if not rows:
+            return ToolResult(tool_name="list_pending_requests_summary", data="No hay solicitudes pendientes.")
+
+        lines = [f"• {name}: {req.start_date} a {req.end_date} ({req.requested_days:.0f}d)" for req, name in rows]
+        return ToolResult(
+            tool_name="list_pending_requests_summary",
+            data=f"Solicitudes pendientes ({len(rows)}):\n" + "\n".join(lines),
+            record_count=len(rows),
+        )
+
+    # ── list_people_out_in_range ───────────────────────
+    def list_people_out_in_range(self, start_date: date | None = None, end_date: date | None = None, team_id: str | None = None, manager_id: str | None = None) -> ToolResult:
+        start, end = self._normalize_range(start_date, end_date)
+        filters = [
+            VacationRequest.status == VacationRequestStatus.APPROVED,
+            VacationRequest.start_date <= end,
+            VacationRequest.end_date >= start,
+        ]
+        if manager_id:
+            filters.append(VacationRequest.manager_id == manager_id)
+        elif team_id:
+            filters.append(VacationRequest.team_id == team_id)
+        emp_alias = aliased(User)
+        stmt = (
+            select(VacationRequest, emp_alias.full_name)
+            .join(emp_alias, emp_alias.id == VacationRequest.employee_id)
+            .where(*filters)
+            .order_by(VacationRequest.start_date.asc(), emp_alias.full_name.asc())
+        )
+        rows = self.db.execute(stmt).all()
+        if not rows:
+            return ToolResult(tool_name='list_people_out_in_range', data=f'No hay personas fuera entre {start} y {end}.')
+        lines = [f"• {name}: {req.start_date} a {req.end_date} ({req.requested_days:.0f}d)" for req, name in rows]
+        return ToolResult(tool_name='list_people_out_in_range', data=f'Personas fuera entre {start} y {end} ({len(rows)}):\n' + '\n'.join(lines), record_count=len(rows))
+
+    # ── list_people_returning_soon ─────────────────────
+    def list_people_returning_soon(self, days: int = 7, team_id: str | None = None, manager_id: str | None = None) -> ToolResult:
+        today = self._today()
+        _, end = self._normalize_range(today, None, days)
+        filters = [
+            VacationRequest.status == VacationRequestStatus.APPROVED,
+            VacationRequest.end_date >= today,
+            VacationRequest.end_date <= end,
+        ]
+        if manager_id:
+            filters.append(VacationRequest.manager_id == manager_id)
+        elif team_id:
+            filters.append(VacationRequest.team_id == team_id)
+        emp_alias = aliased(User)
+        stmt = (
+            select(VacationRequest, emp_alias.full_name)
+            .join(emp_alias, emp_alias.id == VacationRequest.employee_id)
+            .where(*filters)
+            .order_by(VacationRequest.end_date.asc(), emp_alias.full_name.asc())
+        )
+        rows = self.db.execute(stmt).all()
+        if not rows:
+            return ToolResult(tool_name='list_people_returning_soon', data=f'No hay personas regresando en los próximos {days} días.')
+        lines = [f"• {name}: regresa el {req.end_date}" for req, name in rows]
+        return ToolResult(tool_name='list_people_returning_soon', data=f'Personas que regresan pronto ({len(rows)}):\n' + '\n'.join(lines), record_count=len(rows))
+
+    # ── list_low_balance_people ────────────────────────
+    def list_low_balance_people(self, manager_id: str | None = None) -> ToolResult:
+        year = self._today().year
+        stmt = (
+            select(User.full_name, User.role, VacationBalance.available_days)
+            .join(User, User.id == VacationBalance.user_id)
+            .where(User.is_active.is_(True), VacationBalance.year == year, VacationBalance.available_days < 3)
+            .order_by(VacationBalance.available_days.asc(), User.full_name.asc())
+        )
+        if manager_id:
+            stmt = stmt.where(User.manager_id == manager_id)
+        rows = self.db.execute(stmt).all()
+        if not rows:
+            return ToolResult(tool_name='list_low_balance_people', data='No hay personas con saldo bajo.')
+        lines = [f"• {name} — {role.value} — {float(days):.0f} días disponibles" for name, role, days in rows]
+        return ToolResult(tool_name='list_low_balance_people', data=f'Personas con saldo bajo ({len(rows)}):\n' + '\n'.join(lines), record_count=len(rows))
+
     # ── get_team_summary ───────────────────────────────
     def get_team_summary(self, team_id: str | None = None, manager_id: str | None = None) -> ToolResult:
         today = self._today()
 
-        emp_filters = [User.is_active.is_(True)]
+        emp_filters = [User.is_active.is_(True), User.role.in_([UserRole.EMPLOYEE, UserRole.MANAGER])]
         req_team_filters: list = []
-        if team_id:
-            emp_filters.append(User.team_id == team_id)
-            req_team_filters.append(VacationRequest.team_id == team_id)
-        elif manager_id:
+        if manager_id:
             emp_filters.append(User.manager_id == manager_id)
             req_team_filters.append(VacationRequest.manager_id == manager_id)
+        elif team_id:
+            emp_filters.append(User.team_id == team_id)
+            req_team_filters.append(VacationRequest.team_id == team_id)
 
         total = int(self.db.execute(select(func.count(User.id)).where(*emp_filters)).scalar_one() or 0)
 
@@ -366,8 +580,35 @@ class AIToolExecutor:
     # ── get_policies_by_area ─────────────────────────
     def get_policies_by_area(self, team_id: str | None = None) -> ToolResult:
         today = self._today()
+
         if not team_id:
-            return ToolResult(tool_name="get_policies_by_area", data="No se especificó equipo para consultar política.")
+            stmt = (
+                select(TeamPolicy, Team.name)
+                .join(Team, Team.id == TeamPolicy.team_id)
+                .where(
+                    TeamPolicy.effective_from <= today,
+                    (TeamPolicy.effective_to.is_(None) | (TeamPolicy.effective_to >= today)),
+                )
+                .order_by(Team.name.asc(), TeamPolicy.effective_from.desc())
+            )
+            rows = self.db.execute(stmt).all()
+            if not rows:
+                return ToolResult(tool_name="get_policies_by_area", data="No hay políticas activas por equipo.")
+
+            seen = set()
+            lines = []
+            for policy, team_name in rows:
+                if team_name in seen:
+                    continue
+                seen.add(team_name)
+                lines.append(
+                    f"• {team_name}: máximo {policy.max_people_off_per_day} personas fuera por día, mínimo {policy.min_notice_days} días de anticipación, vigente desde {policy.effective_from}"
+                )
+            return ToolResult(
+                tool_name="get_policies_by_area",
+                data="Políticas activas por equipo:\n" + "\n".join(lines),
+                record_count=len(lines),
+            )
 
         stmt = (
             select(TeamPolicy)
@@ -416,7 +657,19 @@ class AIToolExecutor:
             elif tool_name == "list_employees":
                 return self.list_employees()
             elif tool_name == "list_team_members":
-                return self.list_team_members(user_id)
+                return self.list_team_members(user_id, team_id=team_id)
+            elif tool_name == "list_people_out_today":
+                return self.list_people_out_today(team_id=team_id, manager_id=user_id)
+            elif tool_name == "list_people_available_today":
+                return self.list_people_available_today(team_id=team_id, manager_id=user_id)
+            elif tool_name == "list_pending_requests_summary":
+                return self.list_pending_requests_summary(team_id=team_id, manager_id=user_id)
+            elif tool_name == "list_people_out_in_range":
+                return self.list_people_out_in_range(kwargs.get('start_date'), kwargs.get('end_date'), team_id=team_id, manager_id=user_id)
+            elif tool_name == "list_people_returning_soon":
+                return self.list_people_returning_soon(kwargs.get('days', 7), team_id=team_id, manager_id=user_id)
+            elif tool_name == "list_low_balance_people":
+                return self.list_low_balance_people(manager_id=user_id if role == 'MANAGER' else None)
             elif tool_name == "get_team_summary":
                 return self.get_team_summary(team_id=team_id, manager_id=user_id)
             elif tool_name == "get_global_summary":

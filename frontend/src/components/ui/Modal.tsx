@@ -65,9 +65,9 @@ export default function Modal({
         if (e.target === overlayRef.current && !loading) onClose();
       }}
     >
-      <div className={`bg-white rounded-2xl shadow-xl w-full ${sizeClasses[size]} max-h-[90vh] overflow-y-auto`}>
+      <div className={`bg-white rounded-2xl shadow-xl ring-1 ring-slate-200/70 w-full ${sizeClasses[size]} max-h-[90vh] overflow-y-auto`}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/60">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <button
             onClick={onClose}
@@ -83,7 +83,7 @@ export default function Modal({
 
         {/* Footer */}
         {footer ? (
-          <div className="px-6 py-4 border-t border-gray-100">{footer}</div>
+          <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/50">{footer}</div>
         ) : onConfirm ? (
           <div className="flex justify-end gap-3 px-6 py-4 border-t border-gray-100">
             <Button variant="secondary" onClick={onClose} disabled={loading}>

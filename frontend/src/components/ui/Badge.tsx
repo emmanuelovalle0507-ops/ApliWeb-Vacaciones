@@ -47,10 +47,10 @@ export function SendStatusBadge({ status }: { status: EmailStatus }) {
 
 export function RoleBadge({ role }: { role: string }) {
   const styles: Record<string, string> = {
-    ADMIN: "bg-purple-100 text-purple-800 border-purple-200",
-    MANAGER: "bg-blue-100 text-blue-800 border-blue-200",
-    EMPLOYEE: "bg-seekop-100 text-seekop-800 border-seekop-200",
-    HR: "bg-teal-100 text-teal-800 border-teal-200",
+    ADMIN: "bg-slate-100 text-slate-800 border-slate-200",
+    MANAGER: "bg-seekop-100 text-seekop-800 border-seekop-200",
+    EMPLOYEE: "bg-[#9ab236]/15 text-[#6f8425] border-[#9ab236]/30",
+    HR: "bg-seekop-50 text-seekop-700 border-seekop-200",
   };
   const labels: Record<string, string> = {
     ADMIN: "Admin",

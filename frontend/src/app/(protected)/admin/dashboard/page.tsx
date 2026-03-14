@@ -343,7 +343,7 @@ export default function AdminDashboardPage() {
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <Shield size={18} className="text-gray-500" />
-            <h3 className="text-sm font-semibold text-gray-700">Registro de actividad del sistema</h3>
+            <h3 className="text-sm font-semibold text-seekop-700">Registro de actividad del sistema</h3>
             <div className="ml-auto w-56">
               <Select
                 value={auditAction}

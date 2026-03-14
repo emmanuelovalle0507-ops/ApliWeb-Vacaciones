@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, UserX, AlertTriangle, Users, FileText, BarChart3 } from "lucide-react";
+import { UserPlus, Pencil, UserX, AlertTriangle, Users, FileText, BarChart3, ShieldAlert, KeyRound, Briefcase, Building2 } from "lucide-react";
 import api from "@/api/client";
 import type { User, UserRole, RequestStatus, VacationBalance, UserCreatePayload, UserUpdatePayload } from "@/types";
 import RoleGuard from "@/components/layout/RoleGuard";
@@ -48,6 +48,8 @@ export default function HRDashboardPage() {
   const [userRole, setUserRole] = useState("");
   const [userArea, setUserArea] = useState("");
   const [userSearch, setUserSearch] = useState("");
+  const [userStatusFilter, setUserStatusFilter] = useState<"" | "active" | "inactive">("");
+  const [userIssueFilter, setUserIssueFilter] = useState<"" | "no-manager" | "no-area" | "no-position" | "must-change-password">("");
 
   // ── Requests tab state ──
   const [reqStatus, setReqStatus] = useState("");
@@ -88,6 +90,20 @@ export default function HRDashboardPage() {
       return res.items;
     },
   });
+
+  const filteredUsers = useMemo(() => {
+    let users = usersQ.data ?? [];
+
+    if (userStatusFilter === "active") users = users.filter((u) => u.isActive !== false);
+    if (userStatusFilter === "inactive") users = users.filter((u) => u.isActive === false);
+
+    if (userIssueFilter === "no-manager") users = users.filter((u) => !u.managerIds?.length && !u.managerId);
+    if (userIssueFilter === "no-area") users = users.filter((u) => !u.area?.id || u.area.id === "no-team");
+    if (userIssueFilter === "no-position") users = users.filter((u) => !u.position);
+    if (userIssueFilter === "must-change-password") users = users.filter((u) => (u as User & { mustChangePassword?: boolean }).mustChangePassword);
+
+    return users;
+  }, [usersQ.data, userStatusFilter, userIssueFilter]);
 
   const requestsQ = useQuery({
     queryKey: ["admin.requests", reqStatus, reqArea, reqStart, reqEnd],
@@ -209,8 +225,34 @@ export default function HRDashboardPage() {
     {
       key: "position",
       header: "Puesto",
+      render: (row) => {
+        const fallbackPosition = row.role === "ADMIN" ? "Administrador" : row.role === "HR" ? "Recursos Humanos" : null;
+        return (
+          <span className="text-sm text-gray-500">{row.position || fallbackPosition || <span className="text-gray-300">Sin asignar</span>}</span>
+        );
+      },
+    },
+    {
+      key: "managerIds",
+      header: "Managers",
+      render: (row) => {
+        const managerCount = row.managerIds?.length ?? (row.managerId ? 1 : 0);
+        return managerCount > 0 ? (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">
+            <Users size={12} /> {managerCount}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full">
+            <AlertTriangle size={12} /> Sin manager
+          </span>
+        );
+      },
+    },
+    {
+      key: "hireDate",
+      header: "Ingreso",
       render: (row) => (
-        <span className="text-sm text-gray-500">{row.position || <span className="text-gray-300">Sin asignar</span>}</span>
+        <span className="text-sm text-gray-500">{row.hireDate || <span className="text-gray-300">Sin fecha</span>}</span>
       ),
     },
     {
@@ -231,28 +273,30 @@ export default function HRDashboardPage() {
     },
     {
       key: "id",
-      header: "",
+      header: "Acciones",
       render: (row) => {
         const isAdminTarget = row.role === "ADMIN";
         const blocked = isHR && isAdminTarget;
         return (
-          <div className="flex items-center gap-0.5 justify-end">
+          <div className="flex items-center gap-2 justify-end">
             {!blocked && (
               <button
                 onClick={() => setEditUser(row)}
-                className="p-2 text-gray-400 hover:text-seekop-600 hover:bg-seekop-50 rounded-xl transition-all duration-200"
-                title="Editar empleado"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-seekop-700 bg-seekop-50 hover:bg-seekop-100 border border-seekop-200 rounded-xl transition-all duration-200"
+                title="Editar usuario o promover a manager"
               >
-                <Pencil size={15} />
+                <Pencil size={14} />
+                Editar
               </button>
             )}
             {row.isActive !== false && !blocked && (
               <button
                 onClick={() => setDeactivateTarget(row)}
-                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-all duration-200"
                 title="Desactivar empleado"
               >
-                <UserX size={15} />
+                <UserX size={14} />
+                Desactivar
               </button>
             )}
           </div>
@@ -278,6 +322,59 @@ export default function HRDashboardPage() {
 
   const activeCount = (usersQ.data ?? []).filter((u) => u.isActive !== false).length;
   const totalCount = (usersQ.data ?? []).length;
+  const inactiveCount = totalCount - activeCount;
+
+  const hrMetrics = useMemo(() => {
+    const users = usersQ.data ?? [];
+    const requests = requestsQ.data ?? [];
+    const employeesWithoutManagerList = users.filter(
+      (u) => (u.role === "EMPLOYEE" || u.role === "MANAGER") && (!u.managerIds || u.managerIds.length === 0) && !u.managerId
+    );
+    const usersWithoutManager = employeesWithoutManagerList.length;
+    const usersWithoutArea = users.filter((u) => !u.area?.id || u.area.id === "no-team").length;
+    const usersWithoutPosition = users.filter((u) => !u.position).length;
+    const usersPendingPasswordChange = users.filter((u) => (u as User & { mustChangePassword?: boolean }).mustChangePassword).length;
+    const pendingRequests = requests.filter((r) => r.status === "PENDING").length;
+    return {
+      usersWithoutManager,
+      usersWithoutArea,
+      usersWithoutPosition,
+      usersPendingPasswordChange,
+      pendingRequests,
+      employeesWithoutManagerList,
+    };
+  }, [usersQ.data, requestsQ.data]);
+
+  const operationalAlerts = [
+    {
+      key: "no-manager",
+      count: hrMetrics.usersWithoutManager,
+      label: "empleados sin manager asignado",
+      tone: "amber",
+      icon: ShieldAlert,
+    },
+    {
+      key: "no-area",
+      count: hrMetrics.usersWithoutArea,
+      label: "usuarios sin equipo asignado",
+      tone: "red",
+      icon: Building2,
+    },
+    {
+      key: "no-position",
+      count: hrMetrics.usersWithoutPosition,
+      label: "usuarios sin puesto definido",
+      tone: "blue",
+      icon: Briefcase,
+    },
+    {
+      key: "must-change-password",
+      count: hrMetrics.usersPendingPasswordChange,
+      label: "usuarios pendientes de cambio de contraseña",
+      tone: "violet",
+      icon: KeyRound,
+    },
+  ].filter((alert) => alert.count > 0);
 
   const tabs = [
     {
@@ -317,9 +414,49 @@ export default function HRDashboardPage() {
             </Button>
           </div>
 
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: '', label: 'Todos' },
+              { key: 'active', label: 'Activos' },
+              { key: 'inactive', label: 'Inactivos' },
+            ].map((item) => (
+              <button
+                key={item.key || 'all-status'}
+                onClick={() => setUserStatusFilter(item.key as "" | "active" | "inactive")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                  userStatusFilter === item.key ? 'bg-[#002a7f] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+
+            {[
+              { key: '', label: 'Sin issue' },
+              { key: 'no-manager', label: 'Sin manager' },
+              { key: 'no-area', label: 'Sin equipo' },
+              { key: 'no-position', label: 'Sin puesto' },
+              { key: 'must-change-password', label: 'Cambio contraseña' },
+            ].map((item) => (
+              <button
+                key={item.key || 'all-issues'}
+                onClick={() => setUserIssueFilter(item.key as "" | "no-manager" | "no-area" | "no-position" | "must-change-password")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                  userIssueFilter === item.key ? 'bg-[#9ab236] text-slate-900' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="text-xs text-[#002a7f] bg-[#002a7f]/[0.07] border border-[#002a7f]/[0.14] rounded-xl px-3 py-2">
+            RH puede editar empleados y managers. La restricción se mantiene solo para usuarios con rol ADMIN.
+          </div>
+
           <Table
             columns={userColumns}
-            data={usersQ.data ?? []}
+            data={filteredUsers}
             isLoading={usersQ.isLoading}
             isError={usersQ.isError}
             errorMessage="Error al cargar usuarios."
@@ -392,7 +529,7 @@ export default function HRDashboardPage() {
     <RoleGuard allowed={["HR"]}>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Recursos Humanos</h1>
             <p className="text-sm text-gray-400 mt-0.5">
@@ -400,6 +537,80 @@ export default function HRDashboardPage() {
             </p>
           </div>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+          {[
+            { label: 'Empleados activos', value: activeCount, icon: Users, tone: 'brandGreen' },
+            { label: 'Empleados inactivos', value: inactiveCount, icon: UserX, tone: 'gray' },
+            { label: 'Solicitudes pendientes', value: hrMetrics.pendingRequests, icon: FileText, tone: 'brandBlue' },
+            { label: 'Sin manager', value: hrMetrics.usersWithoutManager, icon: ShieldAlert, tone: 'olive' },
+            { label: 'Sin equipo', value: hrMetrics.usersWithoutArea, icon: Building2, tone: 'red' },
+          ].map((item) => {
+            const toneClass = {
+              brandGreen: 'bg-[#9ab236]/15 text-[#6f8425]',
+              brandBlue: 'bg-[#002a7f]/10 text-[#002a7f]',
+              gray: 'bg-gray-100 text-gray-600',
+              olive: 'bg-[#9ab236]/20 text-[#6f8425]',
+              red: 'bg-red-50 text-red-600',
+            }[item.tone];
+            const Icon = item.icon;
+            return (
+              <div key={item.label} className="bg-white border border-gray-200 rounded-2xl shadow-sm p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-400 font-semibold">{item.label}</p>
+                    <p className="text-2xl font-bold text-gray-900 mt-2">{item.value}</p>
+                  </div>
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${toneClass}`}>
+                    <Icon size={20} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {operationalAlerts.length > 0 && (
+          <div className="bg-white border border-[#002a7f]/15 rounded-2xl shadow-sm p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={18} className="text-[#002a7f]" />
+              <h2 className="text-sm font-semibold text-gray-900">Alertas operativas RH</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {operationalAlerts.map((alert) => {
+                const toneClass = {
+                  amber: 'bg-[#9ab236]/12 border-[#9ab236]/30 text-[#6f8425]',
+                  red: 'bg-red-50 border-red-200 text-red-700',
+                  blue: 'bg-[#002a7f]/8 border-[#002a7f]/20 text-[#002a7f]',
+                  violet: 'bg-slate-100 border-slate-200 text-slate-700',
+                }[alert.tone];
+                const Icon = alert.icon;
+                return (
+                  <div key={alert.key} className={`rounded-xl border px-4 py-3 flex items-start gap-3 ${toneClass}`}>
+                    <div className="mt-0.5"><Icon size={16} /></div>
+                    <div>
+                      <p className="text-sm font-semibold">{alert.count} empleados o managers sin manager asignado</p>
+                      <p className="text-xs opacity-80 mt-1">Conviene revisarlos para mantener limpio el flujo operativo de RH.</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {hrMetrics.employeesWithoutManagerList.length > 0 && (
+              <div className="rounded-xl border border-[#9ab236]/30 bg-[#9ab236]/10 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#6f8425] mb-2">Empleados y managers sin manager</p>
+                <div className="flex flex-wrap gap-2">
+                  {hrMetrics.employeesWithoutManagerList.map((user) => (
+                    <span key={user.id} className="inline-flex items-center rounded-full border border-[#9ab236]/30 bg-white/80 px-3 py-1 text-xs font-medium text-slate-700">
+                      {user.fullName}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <Tabs tabs={tabs} defaultTab="users" />
 

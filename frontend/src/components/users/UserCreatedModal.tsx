@@ -140,7 +140,7 @@ export default function UserCreatedModal({
           {/* Email preview (demo) */}
           {showEmailPreview && (
             <div className="mt-3 border border-gray-200 rounded-xl overflow-hidden text-sm">
-              <div className="bg-seekop-600 px-5 py-3">
+              <div className="bg-seekop-500 px-5 py-3">
                 <p className="text-white font-bold text-sm">SEEKOP Vacaciones</p>
               </div>
               <div className="px-5 py-4 space-y-3 bg-white">

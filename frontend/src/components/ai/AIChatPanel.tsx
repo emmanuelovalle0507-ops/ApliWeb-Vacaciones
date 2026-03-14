@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Send, User as UserIcon, RefreshCw, Sparkles, AlertCircle } from "lucide-react";
+import { Bot, Send, User as UserIcon, RefreshCw, Sparkles, AlertCircle, MessageSquarePlus, Info } from "lucide-react";
 import api from "@/api/client";
 import type { AIChatHistoryItem, UserRole } from "@/types";
 import { useAuth } from "@/providers/AuthProvider";
@@ -58,26 +58,35 @@ const ROLE_CONFIG: Record<UserRole, {
 
 // ── Utility: clean raw tool prefixes from answers ───────────
 function cleanAnswer(text: string): string {
-  // Remove [tool_name] prefixes from raw fallback answers
   let cleaned = text.replace(/\[\w+\]\s*/g, "").trim();
-  // Remove duplicate newlines
+  cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, "$1");
+  cleaned = cleaned.replace(/^#+\s*/gm, "");
+  cleaned = cleaned.replace(/^[-*]\s+/gm, "• ");
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
   return cleaned || text;
 }
 
 // ── Typing dots animation ────────────────────────────────────
-function TypingIndicator() {
+function TypingIndicator({ role }: { role: UserRole }) {
+  const loadingText: Record<UserRole, string> = {
+    ADMIN: 'Revisando métricas y datos globales...',
+    MANAGER: 'Consultando tu equipo y solicitudes...',
+    HR: 'Analizando empleados, balances y solicitudes...',
+    EMPLOYEE: 'Consultando tu saldo y tus solicitudes...',
+  };
+
   return (
     <div className="flex items-start gap-2.5 mb-3">
       <div className="shrink-0 w-7 h-7 rounded-full bg-seekop-100 flex items-center justify-center">
         <Bot size={14} className="text-seekop-600" />
       </div>
-      <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-2.5">
-        <div className="flex gap-1 items-center h-5">
+      <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-2.5 min-w-[220px]">
+        <div className="flex gap-1 items-center h-5 mb-1.5">
           <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
           <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
           <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
         </div>
+        <p className="text-[11px] text-gray-500">{loadingText[role]}</p>
       </div>
     </div>
   );
@@ -100,26 +109,51 @@ function UserBubble({ text, time }: { text: string; time?: string }) {
   );
 }
 
-function AssistantBubble({ text, time, tools }: { text: string; time?: string; tools?: string | null }) {
+function AssistantBubble({ text, time }: { text: string; time?: string; tools?: string | null }) {
   const displayText = cleanAnswer(text);
-  const toolList = tools ? tools.split(",").map((t) => t.trim()).filter(Boolean) : [];
+  const blocks = displayText.split('\n\n').filter(Boolean);
+  const isWarning = /no encontr|solo puedo|no hay/i.test(displayText);
+  const bubbleClass = isWarning
+    ? 'bg-amber-50 border border-amber-200'
+    : 'bg-gray-100 border border-gray-200';
 
   return (
     <div className="flex items-start gap-2.5 mb-3">
       <div className="shrink-0 w-7 h-7 rounded-full bg-seekop-100 flex items-center justify-center">
         <Bot size={14} className="text-seekop-600" />
       </div>
-      <div className="max-w-[80%]">
-        <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-4 py-2.5">
-          <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{displayText}</p>
+      <div className="max-w-[82%]">
+        <div className={`rounded-2xl rounded-tl-sm px-4 py-3 ${bubbleClass}`}>
+          {isWarning && (
+            <div className="flex items-center gap-1.5 mb-2 text-[11px] font-semibold text-amber-700 uppercase tracking-wide">
+              <Info size={12} /> Asistente
+            </div>
+          )}
+          <div className="space-y-3 text-sm text-gray-800 leading-relaxed">
+            {blocks.map((block, idx) => {
+              const lines = block.split('\n').filter(Boolean);
+              const isBulletBlock = lines.every((line) => line.trim().startsWith('•'));
+
+              if (isBulletBlock) {
+                return (
+                  <ul key={idx} className="space-y-1.5">
+                    {lines.map((line, lineIdx) => (
+                      <li key={lineIdx} className="pl-1">{line}</li>
+                    ))}
+                  </ul>
+                );
+              }
+
+              return (
+                <p key={idx} className="whitespace-pre-wrap">
+                  {block}
+                </p>
+              );
+            })}
+          </div>
         </div>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
           {time && <span className="text-[10px] text-gray-400">{time}</span>}
-          {toolList.map((tool) => (
-            <span key={tool} className="text-[10px] text-seekop-400 bg-seekop-50 px-1.5 py-0.5 rounded">
-              {tool.replace(/_/g, " ")}
-            </span>
-          ))}
         </div>
       </div>
     </div>
@@ -177,8 +211,23 @@ export default function AIChatPanel({ title = "Asistente IA" }: AIChatPanelProps
       setQuestion("");
       setLastFailedQ(null);
     },
-    onError: (_err, q) => {
+    onError: (err, q) => {
+      const message = err instanceof Error ? err.message : "Error al consultar el asistente.";
       setLastFailedQ(q);
+      qc.setQueryData<AIChatHistoryItem[]>([...historyKey], (prev) => {
+        const items = prev ?? [];
+        return [
+          {
+            id: Date.now(),
+            question: q,
+            answer: message,
+            scope: "ERROR",
+            toolsUsed: null,
+            createdAt: new Date().toISOString(),
+          },
+          ...items,
+        ];
+      });
     },
   });
 
@@ -211,25 +260,40 @@ export default function AIChatPanel({ title = "Asistente IA" }: AIChatPanelProps
     void handleSend(chip);
   }, [handleSend]);
 
+  const handleNewConversation = useCallback(() => {
+    qc.setQueryData<AIChatHistoryItem[]>([...historyKey], []);
+    setQuestion('');
+    setLastFailedQ(null);
+  }, [qc, historyKey]);
+
   const items = historyQ.data ?? [];
   const reversedItems = [...items].reverse();
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col" style={{ height: "560px" }}>
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-seekop-100 flex items-center justify-center">
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between shrink-0 gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-seekop-100 flex items-center justify-center shrink-0">
             <Sparkles size={16} className="text-seekop-600" />
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-gray-900 truncate">{title}</h3>
             <p className="text-[10px] text-gray-400">Consultas sobre vacaciones</p>
           </div>
         </div>
-        <span className="text-[10px] font-medium text-seekop-600 bg-seekop-50 px-2 py-1 rounded-full uppercase tracking-wide">
-          {role}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[10px] font-medium text-seekop-600 bg-seekop-50 px-2 py-1 rounded-full uppercase tracking-wide">
+            {role}
+          </span>
+          <button
+            type="button"
+            onClick={handleNewConversation}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-seekop-200 text-[10px] font-medium text-seekop-700 bg-white hover:bg-seekop-50 transition-colors"
+          >
+            <MessageSquarePlus size={12} /> Nueva
+          </button>
+        </div>
       </div>
 
       {/* Messages area */}
@@ -250,7 +314,10 @@ export default function AIChatPanel({ title = "Asistente IA" }: AIChatPanelProps
             </div>
             <p className="text-sm font-medium text-gray-700 mb-1">Hola, soy tu asistente de vacaciones</p>
             <p className="text-xs text-gray-400 mb-4 max-w-xs">
-              Puedo ayudarte con consultas sobre saldos, solicitudes, aprobaciones y políticas.
+              {role === 'ADMIN' && 'Puedo ayudarte con métricas globales, pendientes, disponibilidad y políticas por equipo.'}
+              {role === 'MANAGER' && 'Puedo ayudarte con pendientes, disponibilidad y estado operativo de tu equipo.'}
+              {role === 'HR' && 'Puedo ayudarte con consultas globales de empleados, balances, disponibilidad y solicitudes.'}
+              {role === 'EMPLOYEE' && 'Puedo ayudarte con tu saldo, tus solicitudes y reglas generales de vacaciones.'}
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               {config.chips.map((chip) => (
@@ -274,7 +341,7 @@ export default function AIChatPanel({ title = "Asistente IA" }: AIChatPanelProps
           </React.Fragment>
         ))}
 
-        {askMut.isPending && <TypingIndicator />}
+        {askMut.isPending && <TypingIndicator role={role} />}
         <div ref={messagesEndRef} />
       </div>
 
@@ -300,22 +367,25 @@ export default function AIChatPanel({ title = "Asistente IA" }: AIChatPanelProps
 
       {/* Suggestion chips (when there are messages) */}
       {items.length > 0 && !askMut.isPending && (
-        <div className="px-4 pb-1 flex gap-1.5 overflow-x-auto shrink-0">
-          {config.chips.slice(0, 3).map((chip) => (
-            <button
-              key={chip}
-              type="button"
-              onClick={() => handleChipClick(chip)}
-              className="text-[10px] whitespace-nowrap px-2.5 py-1 rounded-full border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
-            >
-              {chip}
-            </button>
-          ))}
+        <div className="px-4 pb-1 shrink-0 space-y-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Consultas sugeridas</p>
+          <div className="flex gap-1.5 overflow-x-auto">
+            {config.chips.slice(0, 3).map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                onClick={() => handleChipClick(chip)}
+                className="text-[10px] whitespace-nowrap px-2.5 py-1 rounded-full border border-seekop-200 text-seekop-600 bg-seekop-50 hover:bg-seekop-100 transition-colors"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Input area */}
-      <div className="px-4 py-3 border-t border-gray-100 shrink-0">
+      <div className="px-4 py-3 border-t border-gray-100 shrink-0 bg-slate-50/50">
         <div className="flex items-end gap-2">
           <textarea
             ref={textareaRef}
@@ -325,7 +395,7 @@ export default function AIChatPanel({ title = "Asistente IA" }: AIChatPanelProps
             placeholder={config.placeholder}
             rows={1}
             aria-label="Escribe tu mensaje"
-            className="flex-1 resize-none px-3 py-2 border border-gray-300 rounded-xl text-sm outline-none transition-colors focus:ring-2 focus:ring-seekop-400 focus:border-seekop-500 max-h-24 overflow-y-auto"
+            className="flex-1 resize-none px-3 py-2.5 border border-gray-300 rounded-2xl text-sm outline-none transition-colors bg-white focus:ring-2 focus:ring-seekop-300 focus:border-seekop-500 max-h-24 overflow-y-auto"
             style={{ minHeight: "40px" }}
           />
           <button
@@ -333,7 +403,7 @@ export default function AIChatPanel({ title = "Asistente IA" }: AIChatPanelProps
             onClick={() => void handleSend()}
             disabled={!question.trim() || askMut.isPending}
             aria-label="Enviar mensaje"
-            className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-seekop-500 text-white hover:bg-seekop-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="shrink-0 w-11 h-11 flex items-center justify-center rounded-2xl bg-seekop-500 text-white hover:bg-seekop-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             {askMut.isPending ? (
               <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
