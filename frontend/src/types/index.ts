@@ -1,5 +1,5 @@
 // ── Enums ──────────────────────────────────────────────
-export type UserRole = "EMPLOYEE" | "MANAGER" | "ADMIN" | "HR";
+export type UserRole = "EMPLOYEE" | "MANAGER" | "ADMIN" | "HR" | "FINANCE";
 export type RequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELED";
 export type NotificationType =
   | "REQUEST_CREATED"
@@ -9,7 +9,7 @@ export type NotificationType =
   | "POLICY_UPDATED";
 export type EmailStatus = "PENDING" | "SENT" | "FAILED" | "SKIPPED";
 
-export const USER_ROLES: UserRole[] = ["EMPLOYEE", "MANAGER", "ADMIN", "HR"];
+export const USER_ROLES: UserRole[] = ["EMPLOYEE", "MANAGER", "ADMIN", "HR", "FINANCE"];
 export const REQUEST_STATUSES: RequestStatus[] = ["PENDING", "APPROVED", "REJECTED", "CANCELED"];
 
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -17,6 +17,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   MANAGER: "Manager",
   ADMIN: "Administrador",
   HR: "Recursos Humanos",
+  FINANCE: "Finanzas",
 };
 
 export const STATUS_LABELS: Record<RequestStatus, string> = {

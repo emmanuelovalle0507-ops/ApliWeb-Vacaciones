@@ -189,7 +189,7 @@ function mapTeamPolicy(policy: BackendTeamPolicy): TeamPolicyOut {
 }
 
 function mapRole(role: string): User["role"] {
-  if (role === "EMPLOYEE" || role === "MANAGER" || role === "ADMIN" || role === "HR") return role;
+  if (role === "EMPLOYEE" || role === "MANAGER" || role === "ADMIN" || role === "HR" || role === "FINANCE") return role;
   return "EMPLOYEE";
 }
 
@@ -798,4 +798,204 @@ export async function listAuditLogs(
     })),
     pagination: mapPagination(result.pagination),
   };
+}
+
+// ── Expenses / Viáticos ─────────────────────────────────
+export type ExpenseReceipt = {
+  id: string;
+  reportId: string | null;
+  ownerId: string;
+  fileUrl: string;
+  fileName: string;
+  fileContentType: string;
+  fileSizeBytes: number;
+  ocrText: string | null;
+  extractionJson: Record<string, unknown> | null;
+  extractionStatus: "PENDING" | "PROCESSING" | "DONE" | "FAILED";
+  extractionConfidence: number | null;
+  vendorName: string | null;
+  receiptDate: string | null;
+  totalAmount: number | null;
+  currency: string | null;
+  taxAmount: number | null;
+  paymentMethod: string | null;
+  category: string | null;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ExpenseReport = {
+  id: string;
+  ownerId: string;
+  ownerName: string | null;
+  teamId: string | null;
+  teamName: string | null;
+  title: string;
+  periodStart: string;
+  periodEnd: string;
+  status: "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "NEEDS_CHANGES";
+  totalAmount: number | null;
+  currency: string;
+  submittedAt: string | null;
+  decisionComment: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  receipts: ExpenseReceipt[];
+  receiptCount: number;
+};
+
+export type ExpenseAnalytics = {
+  totalReports: number;
+  totalReceipts: number;
+  totalAmount: number;
+  totalTax: number;
+  byStatus: Record<string, number>;
+  byCategory: Record<string, number>;
+  byMonth: { month: string; total: number }[];
+  topVendors: { name: string; total: number; count: number }[];
+};
+
+export async function uploadReceipts(files: File[]): Promise<ExpenseReceipt[]> {
+  const token = getToken();
+  const formData = new FormData();
+  files.forEach((f) => formData.append("files", f));
+  const res = await fetch(`${BASE_URL}/expenses/receipts/upload`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : "Error al subir archivos.");
+  }
+  return res.json();
+}
+
+export async function listReceipts(
+  params?: { reportId?: string; unassigned?: boolean } & Partial<PaginationParams>,
+): Promise<PaginatedResponse<ExpenseReceipt>> {
+  const qs = new URLSearchParams();
+  if (params?.reportId) qs.set("report_id", params.reportId);
+  if (params?.unassigned) qs.set("unassigned", "true");
+  if (params?.page) qs.set("page", String(params.page));
+  if (params?.pageSize) qs.set("page_size", String(params.pageSize));
+  const q = qs.toString() ? `?${qs.toString()}` : "";
+  const result = await request<{ items: ExpenseReceipt[]; pagination: BackendPaginationMeta }>(`/expenses/receipts${q}`);
+  return { items: result.items, pagination: mapPagination(result.pagination) };
+}
+
+export async function getReceipt(id: string): Promise<ExpenseReceipt> {
+  return request<ExpenseReceipt>(`/expenses/receipts/${id}`);
+}
+
+export async function updateReceipt(id: string, data: Partial<{
+  vendorName: string; receiptDate: string; totalAmount: number; currency: string;
+  taxAmount: number; paymentMethod: string; category: string; description: string;
+}>): Promise<ExpenseReceipt> {
+  return request<ExpenseReceipt>(`/expenses/receipts/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function createExpenseReport(data: {
+  title: string; periodStart: string; periodEnd: string; receiptIds: string[]; currency?: string;
+}): Promise<ExpenseReport> {
+  return request<ExpenseReport>("/expenses/reports", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function listExpenseReports(
+  params?: { status?: string } & Partial<PaginationParams>,
+): Promise<PaginatedResponse<ExpenseReport>> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.page) qs.set("page", String(params.page));
+  if (params?.pageSize) qs.set("page_size", String(params.pageSize));
+  const q = qs.toString() ? `?${qs.toString()}` : "";
+  const result = await request<{ items: ExpenseReport[]; pagination: BackendPaginationMeta }>(`/expenses/reports${q}`);
+  return { items: result.items, pagination: mapPagination(result.pagination) };
+}
+
+export async function getExpenseReport(id: string): Promise<ExpenseReport> {
+  return request<ExpenseReport>(`/expenses/reports/${id}`);
+}
+
+export async function submitExpenseReport(id: string): Promise<ExpenseReport> {
+  return request<ExpenseReport>(`/expenses/reports/${id}/submit`, { method: "POST" });
+}
+
+// ── Finance endpoints ───────────────────────────────────
+export async function createManualReceipt(data: {
+  vendorName: string; receiptDate: string; totalAmount: number; currency?: string;
+  taxAmount?: number; paymentMethod?: string; category?: string; description?: string;
+}): Promise<ExpenseReceipt> {
+  return request<ExpenseReceipt>("/expenses/receipts/manual", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteReceipt(id: string): Promise<void> {
+  await request<void>(`/expenses/receipts/${id}`, { method: "DELETE" });
+}
+
+export async function reExtractReceipt(id: string): Promise<ExpenseReceipt> {
+  return request<ExpenseReceipt>(`/expenses/receipts/${id}/re-extract`, { method: "POST" });
+}
+
+export async function listFinanceReports(
+  params?: { status?: string; ownerId?: string; teamId?: string; search?: string; dateFrom?: string; dateTo?: string; includeReceipts?: boolean } & Partial<PaginationParams>,
+): Promise<PaginatedResponse<ExpenseReport>> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.ownerId) qs.set("owner_id", params.ownerId);
+  if (params?.teamId) qs.set("team_id", params.teamId);
+  if (params?.search) qs.set("search", params.search);
+  if (params?.dateFrom) qs.set("date_from", params.dateFrom);
+  if (params?.dateTo) qs.set("date_to", params.dateTo);
+  if (params?.includeReceipts) qs.set("include_receipts", "true");
+  if (params?.page) qs.set("page", String(params.page));
+  if (params?.pageSize) qs.set("page_size", String(params.pageSize));
+  const q = qs.toString() ? `?${qs.toString()}` : "";
+  const result = await request<{ items: ExpenseReport[]; pagination: BackendPaginationMeta }>(`/finance/reports${q}`);
+  return { items: result.items, pagination: mapPagination(result.pagination) };
+}
+
+export async function getFinanceReport(id: string): Promise<ExpenseReport> {
+  return request<ExpenseReport>(`/finance/reports/${id}`);
+}
+
+export async function getExpenseAnalytics(): Promise<ExpenseAnalytics> {
+  return request<ExpenseAnalytics>("/finance/analytics");
+}
+
+export async function approveReport(id: string, comment?: string): Promise<ExpenseReport> {
+  return request<ExpenseReport>(`/finance/reports/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ comment: comment || null }),
+  });
+}
+
+export async function rejectReport(id: string, comment?: string): Promise<ExpenseReport> {
+  return request<ExpenseReport>(`/finance/reports/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ comment: comment || null }),
+  });
+}
+
+export async function needsChangesReport(id: string, comment?: string): Promise<ExpenseReport> {
+  return request<ExpenseReport>(`/finance/reports/${id}/needs-changes`, {
+    method: "POST",
+    body: JSON.stringify({ comment: comment || null }),
+  });
+}
+
+export function exportReportUrl(id: string): string {
+  return `${BASE_URL}/finance/reports/${id}/export`;
 }

@@ -54,6 +54,16 @@ const ROLE_CONFIG: Record<UserRole, {
     ],
     color: "seekop",
   },
+  FINANCE: {
+    placeholder: "Consulta reportes de gastos, aprobaciones y viáticos...",
+    chips: [
+      "Reportes pendientes",
+      "Resumen de gastos",
+      "Gastos por área",
+      "Reportes aprobados",
+    ],
+    color: "seekop",
+  },
 };
 
 // ── Utility: clean raw tool prefixes from answers ───────────
@@ -73,6 +83,7 @@ function TypingIndicator({ role }: { role: UserRole }) {
     MANAGER: 'Consultando tu equipo y solicitudes...',
     HR: 'Analizando empleados, balances y solicitudes...',
     EMPLOYEE: 'Consultando tu saldo y tus solicitudes...',
+    FINANCE: 'Revisando reportes de gastos y viáticos...',
   };
 
   return (

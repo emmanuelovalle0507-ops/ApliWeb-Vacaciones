@@ -22,6 +22,7 @@ import type {
   AuditLogEntry,
 } from "@/types";
 import { businessDaysBetween } from "@/lib/dates";
+import type { ExpenseReceipt, ExpenseReport } from "@/api/real/client";
 import * as db from "./db";
 
 const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms));
@@ -648,4 +649,89 @@ export async function exportBalancesReport(year: number): Promise<string> {
     return `"${user?.fullName ?? "—"}","${user?.area.name ?? "—"}",${b.year},${b.grantedDays},${b.carriedOverDays},${b.usedDays},${b.availableDays}`;
   });
   return [header, ...rows].join("\n");
+}
+
+// ── Expenses / Viáticos (mock stubs) ────────────────────
+
+export async function uploadReceipts(_files: File[]): Promise<ExpenseReceipt[]> {
+  await delay(300);
+  return [];
+}
+
+export async function listReceipts(
+  _params?: { reportId?: string; unassigned?: boolean } & Partial<PaginationParams>,
+): Promise<PaginatedResponse<ExpenseReceipt>> {
+  await delay(200);
+  return paginate([], _params);
+}
+
+export async function getReceipt(_id: string): Promise<ExpenseReceipt> {
+  throw new Error("Mock: receipt not found");
+}
+
+export async function updateReceipt(_id: string, _data: Record<string, unknown>): Promise<ExpenseReceipt> {
+  throw new Error("Mock: not implemented");
+}
+
+export async function createExpenseReport(_data: Record<string, unknown>): Promise<ExpenseReport> {
+  throw new Error("Mock: not implemented");
+}
+
+export async function listExpenseReports(
+  _params?: { status?: string } & Partial<PaginationParams>,
+): Promise<PaginatedResponse<ExpenseReport>> {
+  await delay(200);
+  return paginate([], _params);
+}
+
+export async function getExpenseReport(_id: string): Promise<ExpenseReport> {
+  throw new Error("Mock: report not found");
+}
+
+export async function submitExpenseReport(_id: string): Promise<ExpenseReport> {
+  throw new Error("Mock: not implemented");
+}
+
+export async function createManualReceipt(_data: Record<string, unknown>): Promise<ExpenseReceipt> {
+  throw new Error("Mock: not implemented");
+}
+
+export async function deleteReceipt(_id: string): Promise<void> {
+  await delay(200);
+}
+
+export async function reExtractReceipt(_id: string): Promise<ExpenseReceipt> {
+  throw new Error("Mock: not implemented");
+}
+
+export async function listFinanceReports(
+  _params?: { status?: string; ownerId?: string; teamId?: string; search?: string; dateFrom?: string; dateTo?: string; includeReceipts?: boolean } & Partial<PaginationParams>,
+): Promise<PaginatedResponse<ExpenseReport>> {
+  await delay(200);
+  return paginate([], _params);
+}
+
+export async function getFinanceReport(_id: string): Promise<ExpenseReport> {
+  throw new Error("Mock: report not found");
+}
+
+export async function getExpenseAnalytics(): Promise<import("@/api/real/client").ExpenseAnalytics> {
+  await delay(200);
+  return { totalReports: 0, totalReceipts: 0, totalAmount: 0, totalTax: 0, byStatus: {}, byCategory: {}, byMonth: [], topVendors: [] };
+}
+
+export async function approveReport(_id: string, _comment?: string): Promise<ExpenseReport> {
+  throw new Error("Mock: not implemented");
+}
+
+export async function rejectReport(_id: string, _comment?: string): Promise<ExpenseReport> {
+  throw new Error("Mock: not implemented");
+}
+
+export async function needsChangesReport(_id: string, _comment?: string): Promise<ExpenseReport> {
+  throw new Error("Mock: not implemented");
+}
+
+export function exportReportUrl(_id: string): string {
+  return "#";
 }

@@ -7,8 +7,10 @@ import { usePathname } from "next/navigation";
 import {
   Building2,
   CalendarDays,
+  DollarSign,
   LayoutDashboard,
   LogOut,
+  Receipt,
   Shield,
   UserCircle,
   X,
@@ -21,6 +23,8 @@ import type { UserRole, NavItem } from "@/types";
 const ICON_MAP: Record<string, LucideIcon> = {
   LayoutDashboard,
   CalendarDays,
+  DollarSign,
+  Receipt,
   Shield,
   UserCircle,
 };
@@ -32,15 +36,21 @@ const NAV_CONFIG: Record<UserRole, NavItem[]> = {
   ],
   MANAGER: [
     { label: "Dashboard Manager", href: "/manager/dashboard", icon: "LayoutDashboard" },
+    { label: "Gastos / Vi\u00e1ticos", href: "/manager/expenses", icon: "Receipt" },
     { label: "Mis Vacaciones", href: "/employee/dashboard", icon: "CalendarDays" },
     { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
   ADMIN: [
     { label: "Panel Admin", href: "/admin/dashboard", icon: "LayoutDashboard" },
+    { label: "Control de Gastos", href: "/admin/expenses", icon: "DollarSign" },
     { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
   HR: [
     { label: "Panel RRHH", href: "/hr/dashboard", icon: "LayoutDashboard" },
+    { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
+  ],
+  FINANCE: [
+    { label: "Revisi\u00f3n de Gastos", href: "/finance/dashboard", icon: "Receipt" },
     { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
 };
@@ -50,6 +60,7 @@ const ROLE_LABEL: Record<string, string> = {
   MANAGER: "Manager",
   EMPLOYEE: "Empleado",
   HR: "RRHH",
+  FINANCE: "Finanzas",
 };
 
 interface SidebarProps {

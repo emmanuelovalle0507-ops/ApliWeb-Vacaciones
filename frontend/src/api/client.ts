@@ -74,6 +74,28 @@ export const api = {
     getOnboardingQuestions: impl.getTeamPolicyOnboardingQuestions,
     runAgent: impl.runTeamPolicyAgent,
   },
+  expenses: {
+    uploadReceipts: impl.uploadReceipts,
+    listReceipts: impl.listReceipts,
+    getReceipt: impl.getReceipt,
+    updateReceipt: impl.updateReceipt,
+    createManualReceipt: impl.createManualReceipt,
+    deleteReceipt: impl.deleteReceipt,
+    reExtractReceipt: impl.reExtractReceipt,
+    createReport: impl.createExpenseReport,
+    listReports: impl.listExpenseReports,
+    getReport: impl.getExpenseReport,
+    submitReport: impl.submitExpenseReport,
+  },
+  finance: {
+    listReports: impl.listFinanceReports,
+    getReport: impl.getFinanceReport,
+    getAnalytics: impl.getExpenseAnalytics,
+    approve: impl.approveReport,
+    reject: impl.rejectReport,
+    needsChanges: impl.needsChangesReport,
+    exportReportUrl: impl.exportReportUrl,
+  },
 };
 
 export default api;

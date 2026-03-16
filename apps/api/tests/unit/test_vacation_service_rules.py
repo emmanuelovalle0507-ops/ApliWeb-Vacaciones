@@ -10,7 +10,7 @@ from app.services.vacation_request_service import VacationRequestService
     ("start_date", "end_date", "expected_days"),
     [
         (date(2026, 3, 10), date(2026, 3, 10), Decimal("1")),
-        (date(2026, 3, 10), date(2026, 3, 14), Decimal("5")),
+        (date(2026, 3, 9), date(2026, 3, 13), Decimal("5")),
     ],
 )
 def test_calculate_requested_days(start_date: date, end_date: date, expected_days: Decimal) -> None:

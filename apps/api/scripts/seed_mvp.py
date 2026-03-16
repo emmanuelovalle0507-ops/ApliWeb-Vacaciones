@@ -272,6 +272,16 @@ def run() -> None:
                 team_id=team_ia.id,
             )
 
+            # ── FINANCE ──
+            finance_user = _ensure_user(
+                db,
+                email="LuisF@seekop.com",
+                full_name="Luis Fernández",
+                role=UserRole.FINANCE,
+                password_plain="Seekop2026!",
+                team_id=team_ops.id,
+            )
+
             # ── Políticas de equipo ──
             _ensure_team_policy(db, team_id=team_ia.id, created_by=admin.id, max_people_off_per_day=2, min_notice_days=10)
             _ensure_team_policy(db, team_id=team_mkt.id, created_by=admin.id, max_people_off_per_day=1, min_notice_days=7)
@@ -290,6 +300,7 @@ def run() -> None:
                 (maria, Decimal("15.00"), Decimal("3.00")),
                 (pedro, Decimal("15.00"), Decimal("1.00")),
                 (hr_user, Decimal("15.00"), Decimal("0.00")),
+                (finance_user, Decimal("15.00"), Decimal("0.00")),
             ]
             for user, available, used in all_users_with_balance:
                 _ensure_balance(db, user_id=user.id, year=SEED_YEAR, available_days=available, used_days=used)
@@ -297,28 +308,30 @@ def run() -> None:
     print()
     print("[seed] Seed completado OK.")
     print()
-    print("[seed] ╔══════════════════════════════════════════════════════════════╗")
-    print("[seed] ║          CREDENCIALES PARA PRESENTACIÓN                     ║")
-    print("[seed] ║  (Todos usan contraseña: Seekop2026!)                       ║")
-    print("[seed] ╠══════════════════════════════════════════════════════════════╣")
-    print("[seed] ║  ADMIN                                                      ║")
-    print("[seed] ║    RicardoB@seekop.com      Ricardo Seekop                  ║")
-    print("[seed] ║  MANAGERS                                                   ║")
-    print("[seed] ║    JosueO@seekop.com        Josue Ovalle (Desarrollo IA)    ║")
-    print("[seed] ║    DanielaR@seekop.com      Daniela Ríos (Marketing)        ║")
-    print("[seed] ║    AndresM@seekop.com       Andrés Mendoza (Operaciones)    ║")
-    print("[seed] ║  EMPLEADOS — Desarrollo de IA                               ║")
-    print("[seed] ║    RicardoN@seekop.com      Ricardo Nieto                   ║")
-    print("[seed] ║    EmmanuelS@seekop.com     Emmanuel Salas                  ║")
-    print("[seed] ║  EMPLEADOS — Marketing Digital                              ║")
-    print("[seed] ║    SofiaV@seekop.com        Sofía Vargas                    ║")
-    print("[seed] ║    CarlosL@seekop.com       Carlos López                    ║")
-    print("[seed] ║  EMPLEADOS — Operaciones                                    ║")
-    print("[seed] ║    MariaG@seekop.com        María García                    ║")
-    print("[seed] ║    PedroH@seekop.com        Pedro Hernández                 ║")
-    print("[seed] ║  HR                                                         ║")
-    print("[seed] ║    MonicaT@seekop.com       Mónica Torres                   ║")
-    print("[seed] ╚══════════════════════════════════════════════════════════════╝")
+    print("[seed] +--------------------------------------------------------------+")
+    print("[seed] |          CREDENCIALES PARA PRESENTACION                     |")
+    print("[seed] |  (Todos usan password: Seekop2026!)                         |")
+    print("[seed] +--------------------------------------------------------------+")
+    print("[seed] |  ADMIN                                                      |")
+    print("[seed] |    RicardoB@seekop.com      Ricardo Seekop                  |")
+    print("[seed] |  MANAGERS                                                   |")
+    print("[seed] |    JosueO@seekop.com        Josue Ovalle (Desarrollo IA)    |")
+    print("[seed] |    DanielaR@seekop.com      Daniela Rios (Marketing)        |")
+    print("[seed] |    AndresM@seekop.com       Andres Mendoza (Operaciones)    |")
+    print("[seed] |  EMPLEADOS - Desarrollo de IA                               |")
+    print("[seed] |    RicardoN@seekop.com      Ricardo Nieto                   |")
+    print("[seed] |    EmmanuelS@seekop.com     Emmanuel Salas                  |")
+    print("[seed] |  EMPLEADOS - Marketing Digital                              |")
+    print("[seed] |    SofiaV@seekop.com        Sofia Vargas                    |")
+    print("[seed] |    CarlosL@seekop.com       Carlos Lopez                    |")
+    print("[seed] |  EMPLEADOS - Operaciones                                    |")
+    print("[seed] |    MariaG@seekop.com        Maria Garcia                    |")
+    print("[seed] |    PedroH@seekop.com        Pedro Hernandez                 |")
+    print("[seed] |  HR                                                         |")
+    print("[seed] |    MonicaT@seekop.com       Monica Torres                   |")
+    print("[seed] |  FINANCE                                                    |")
+    print("[seed] |    LuisF@seekop.com         Luis Fernandez                  |")
+    print("[seed] +--------------------------------------------------------------+")
 
 
 if __name__ == "__main__":

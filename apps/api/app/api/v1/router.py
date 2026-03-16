@@ -4,6 +4,8 @@ from app.api.v1.admin import router as admin_router
 from app.api.v1.ai_chat import router as ai_chat_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.calendar import router as calendar_router
+from app.api.v1.expenses import router as expenses_router
+from app.api.v1.finance import router as finance_router
 from app.api.v1.health import router as health_router
 from app.api.v1.manager import router as manager_router
 from app.api.v1.notifications import router as notifications_router
@@ -20,3 +22,5 @@ api_router.include_router(notifications_router)
 api_router.include_router(team_policies_router)
 api_router.include_router(calendar_router)
 api_router.include_router(admin_router)
+api_router.include_router(expenses_router)
+api_router.include_router(finance_router)

@@ -43,8 +43,18 @@ def test_create_request_requires_reason_when_below_min_notice() -> None:
                 return manager
             return None
 
+        @staticmethod
+        def get_manager_ids(user_id: str):
+            return [str(manager.id)]
+
     service.user_repo = _UserRepo()
-    service.request_repo = SimpleNamespace(count_team_occupied_on_day=lambda team_id, day: 0)
+    service.request_repo = SimpleNamespace(
+        count_team_occupied_on_day=lambda team_id, day: 0,
+        list_by_employee=lambda employee_id: [],
+    )
+    service.balance_repo = SimpleNamespace(
+        get_by_user_year=lambda uid, yr: SimpleNamespace(available_days=20),
+    )
     service.policy_repo = SimpleNamespace(
         get_active_for_date=lambda team_id, target_date: SimpleNamespace(
             max_people_off_per_day=2,
@@ -55,7 +65,7 @@ def test_create_request_requires_reason_when_below_min_notice() -> None:
 
     service._today = staticmethod(lambda: date(2026, 3, 1))  # type: ignore[method-assign]
 
-    with pytest.raises(PolicyValidationError, match="Reason is required"):
+    with pytest.raises(PolicyValidationError, match="requiere mínimo"):
         service.create_request(
             employee_id=str(employee.id),
             start_date=date(2026, 3, 5),
@@ -82,7 +92,7 @@ def test_reject_requires_decision_comment() -> None:
 
     service.request_repo = _RequestRepo()
 
-    with pytest.raises(PolicyValidationError, match="Decision comment is required"):
+    with pytest.raises(PolicyValidationError, match="Debes escribir un comentario"):
         service.reject(
             request_id=str(request.id),
             manager_id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
@@ -97,7 +107,7 @@ def test_validate_team_daily_capacity_blocks_when_full() -> None:
     )
     service.request_repo = SimpleNamespace(count_team_occupied_on_day=lambda team_id, target_day: 1)
 
-    with pytest.raises(ValueError, match="Team daily capacity reached"):
+    with pytest.raises(PolicyValidationError, match="persona.*fuera"):
         service._validate_team_daily_capacity(
             team_id="33333333-3333-3333-3333-333333333333",
             start_date=date(2026, 4, 10),

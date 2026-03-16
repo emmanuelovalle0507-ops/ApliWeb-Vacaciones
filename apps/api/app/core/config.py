@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     smtp_from_name: str = "SEEKOP Vacaciones"
     smtp_from_email: str | None = None
     app_frontend_url: str = "http://localhost:3000"
+    # Expenses / Storage
+    storage_backend: str = "local"  # "local" or "s3"
+    upload_dir: str = "./uploads"
+    max_upload_size_mb: int = 10
+    allowed_upload_types: str = "image/jpeg,image/png,image/webp,application/pdf"
+    openai_vision_model: str = "gpt-4o"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
