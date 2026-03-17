@@ -16,7 +16,7 @@ import { useToast } from "@/components/ui/Toast";
 type Tab = "tickets" | "reports";
 type AddMode = "upload" | "manual" | null;
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+const API_BASE = "/api/v1";
 
 const EXTRACTION_STATUS: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   PENDING: { label: "Pendiente", color: "bg-gray-100 text-gray-600", icon: <Clock size={14} /> },
@@ -40,15 +40,12 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const CATEGORY_OPTIONS = Object.entries(CATEGORY_LABELS);
 
-/** Host origin for file URLs (fileUrl already includes /api/v1/...) */
-const API_HOST = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1").replace(/\/api\/v1\/?$/, "");
-
-/** Build an authenticated file URL for <img> tags (appends token as query param) */
+/** Build an authenticated file URL for <img> tags (appends token as query param).
+ *  fileUrl already includes /api/v1/... — use relative path so Next.js proxy handles it. */
 function getAuthFileUrl(fileUrl: string): string {
   if (!fileUrl || fileUrl === "manual") return "";
   const token = typeof window !== "undefined" ? localStorage.getItem("vc_token") : null;
-  const base = `${API_HOST}${fileUrl}`;
-  return token ? `${base}${base.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : base;
+  return token ? `${fileUrl}${fileUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : fileUrl;
 }
 
 const PAYMENT_LABELS: Record<string, string> = {

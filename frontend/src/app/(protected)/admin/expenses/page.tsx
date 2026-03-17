@@ -12,15 +12,12 @@ import api from "@/api/client";
 import type { ExpenseReceipt, ExpenseReport, ExpenseAnalytics } from "@/api/real/client";
 import { useToast } from "@/components/ui/Toast";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
-
-const API_HOST = API_BASE.replace(/\/api\/v1\/?$/, "");
+const API_BASE = "/api/v1";
 
 function getAuthFileUrl(fileUrl: string): string {
   if (!fileUrl || fileUrl === "manual") return "";
   const token = typeof window !== "undefined" ? localStorage.getItem("vc_token") : null;
-  const base = `${API_HOST}${fileUrl}`;
-  return token ? `${base}${base.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : base;
+  return token ? `${fileUrl}${fileUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : fileUrl;
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; border: string }> = {

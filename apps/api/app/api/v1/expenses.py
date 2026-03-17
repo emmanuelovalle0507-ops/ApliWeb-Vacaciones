@@ -271,6 +271,16 @@ def update_receipt(
     if str(receipt.owner_id) != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a este ticket.")
 
+    # Block editing if the receipt belongs to an APPROVED or REJECTED report
+    if receipt.report_id:
+        from app.repositories.expense_report_repo import ExpenseReportRepository
+        report = ExpenseReportRepository(db).get_by_id(str(receipt.report_id))
+        if report and report.status.value in ("APPROVED", "REJECTED"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"No se puede editar un ticket en un reporte {report.status.value.lower()}.",
+            )
+
     changes = payload.model_dump(exclude_none=True)
     if changes:
         repo.update_extraction(

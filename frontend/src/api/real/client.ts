@@ -26,7 +26,7 @@ import type {
   AuditLogEntry,
 } from "@/types";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api/v1";
 
 type BackendUserSummary = {
   id: string;
@@ -285,7 +285,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       },
     });
   } catch (err) {
-    throw new Error("No se pudo conectar con el servidor. Verifica tu conexión a internet.");
+    console.error("[API] fetch error:", err, "URL:", `${BASE_URL}${path}`);
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`No se pudo conectar con el servidor: ${detail}`);
   }
 
   if (!res.ok) {
