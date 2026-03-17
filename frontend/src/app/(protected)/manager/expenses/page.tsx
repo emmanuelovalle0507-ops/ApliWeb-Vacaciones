@@ -40,11 +40,14 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const CATEGORY_OPTIONS = Object.entries(CATEGORY_LABELS);
 
+/** Host origin for file URLs (fileUrl already includes /api/v1/...) */
+const API_HOST = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1").replace(/\/api\/v1\/?$/, "");
+
 /** Build an authenticated file URL for <img> tags (appends token as query param) */
 function getAuthFileUrl(fileUrl: string): string {
   if (!fileUrl || fileUrl === "manual") return "";
   const token = typeof window !== "undefined" ? localStorage.getItem("vc_token") : null;
-  const base = `${API_BASE}${fileUrl}`;
+  const base = `${API_HOST}${fileUrl}`;
   return token ? `${base}${base.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : base;
 }
 
