@@ -7,7 +7,7 @@ import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Table from "@/components/ui/Table";
-import { RoleBadge } from "@/components/ui/Badge";
+import { ExpenseStatusBadge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import api from "@/api/client";
 import { useAuth } from "@/providers/AuthProvider";
@@ -113,7 +113,7 @@ export default function ManagerExpensesPage() {
 
   const reportColumns = [
     { key: "title", header: "Reporte", render: (row: ExpenseReport) => <div><p className="font-semibold text-slate-900">{row.title}</p><p className="text-xs text-slate-500">{row.description || "Sin descripción"}</p></div> },
-    { key: "status", header: "Estado", render: (row: ExpenseReport) => <RoleBadge role={row.status} /> },
+    { key: "status", header: "Estado", render: (row: ExpenseReport) => <ExpenseStatusBadge status={row.status} /> },
     { key: "total", header: "Total", render: (row: ExpenseReport) => <span className="font-medium">{money(row.total, row.currency)}</span> },
     { key: "receipts", header: "Comprobantes", render: (row: ExpenseReport) => <span>{row.receipts?.length ?? 0}</span> },
   ];

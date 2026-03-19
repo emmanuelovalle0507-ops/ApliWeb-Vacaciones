@@ -7,7 +7,7 @@ import Card, { CardBody, CardHeader } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Table from "@/components/ui/Table";
 import Input from "@/components/ui/Input";
-import { RoleBadge } from "@/components/ui/Badge";
+import { ExpenseStatusBadge } from "@/components/ui/Badge";
 import { useToast } from "@/components/ui/Toast";
 import api from "@/api/client";
 import type { ExpenseReceipt, ExpenseReport } from "@/types";
@@ -60,7 +60,7 @@ export default function FinanceExpensesPage() {
 
   const columns = [
     { key: "title", header: "Reporte", render: (row: ExpenseReport) => <div><p className="font-semibold text-slate-900">{row.title}</p><p className="text-xs text-slate-500">{row.description || "Sin descripción"}</p></div> },
-    { key: "status", header: "Estado", render: (row: ExpenseReport) => <RoleBadge role={row.status} /> },
+    { key: "status", header: "Estado", render: (row: ExpenseReport) => <ExpenseStatusBadge status={row.status} /> },
     { key: "total", header: "Total", render: (row: ExpenseReport) => <span className="font-medium">{money(row.total, row.currency)}</span> },
     { key: "createdAt", header: "Creado", render: (row: ExpenseReport) => new Date(row.createdAt).toLocaleDateString() },
   ];
