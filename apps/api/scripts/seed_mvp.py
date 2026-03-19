@@ -2,6 +2,7 @@
 
 Este script crea datos base para probar el sistema localmente:
 - 1 ADMIN
+- 1 FINANCE
 - 1 MANAGER
 - 1 EMPLOYEE (asignado al manager)
 - Balance anual inicial para el employee
@@ -168,6 +169,17 @@ def run() -> None:
                 team_id=team_ia.id,
             )
 
+            # ── FINANCE ──
+            finance_user = _ensure_user(
+                db,
+                email="Finanzas@seekop.com",
+                full_name="Finanzas Seekop",
+                role=UserRole.FINANCE,
+                password_plain="Seekop2026!",
+                team_id=team_ops.id,
+                manager_id=admin.id,
+            )
+
             # ── MANAGERS ──
             josue = _ensure_user(
                 db,
@@ -280,6 +292,7 @@ def run() -> None:
             # ── Balances ──
             all_users_with_balance = [
                 (admin, Decimal("20.00"), Decimal("2.00")),
+                (finance_user, Decimal("15.00"), Decimal("0.00")),
                 (josue, Decimal("18.00"), Decimal("3.00")),
                 (daniela, Decimal("18.00"), Decimal("5.00")),
                 (andres, Decimal("18.00"), Decimal("0.00")),
@@ -303,6 +316,8 @@ def run() -> None:
     print("[seed] ╠══════════════════════════════════════════════════════════════╣")
     print("[seed] ║  ADMIN                                                      ║")
     print("[seed] ║    RicardoB@seekop.com      Ricardo Seekop                  ║")
+    print("[seed] ║  FINANCE                                                   ║")
+    print("[seed] ║    Finanzas@seekop.com     Finanzas Seekop                ║")
     print("[seed] ║  MANAGERS                                                   ║")
     print("[seed] ║    JosueO@seekop.com        Josue Ovalle (Desarrollo IA)    ║")
     print("[seed] ║    DanielaR@seekop.com      Daniela Ríos (Marketing)        ║")
