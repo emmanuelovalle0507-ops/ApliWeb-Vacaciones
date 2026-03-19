@@ -80,6 +80,7 @@ export const api = {
       listReports: impl.listManagerExpenseReports,
       getReport: impl.getManagerExpenseReport,
       createReport: impl.createManagerExpenseReport,
+      createManualReceipt: impl.createManualExpenseReceipt,
       uploadReceipt: impl.uploadExpenseReceipt,
       submitReport: impl.submitManagerExpenseReport,
       analyzeReceipt: impl.analyzeExpenseReceipt,

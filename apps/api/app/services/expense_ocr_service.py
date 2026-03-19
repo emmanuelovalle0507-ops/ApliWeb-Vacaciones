@@ -29,7 +29,8 @@ class ExpenseOCRService:
         system = (
             "Extrae datos de facturación/viáticos para México. "
             "Devuelve SOLO JSON válido con: invoice_date, issuer_rfc, issuer_name, folio, subtotal, iva, total, currency, "
-            "suggested_category, sat_usage, payment_method, payment_form, fiscal_uuid, confidence, warnings."
+            "suggested_category, sat_usage, payment_method, payment_form, fiscal_uuid, confidence, warnings. "
+            "Si es ticket para facturación mexicana, intenta extraer especialmente RFC, razón social, fecha, total, subtotal, IVA, forma de pago, método de pago y folio."
         )
         user = (
             f"Archivo: {Path(storage_path).name}\n"
@@ -55,25 +56,28 @@ class ExpenseOCRService:
     def _fallback_extract(self, text: str) -> dict:
         upper = text.upper()
         rfc_match = re.search(r"\b([A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3})\b", upper)
-        total_match = re.search(r"(?:TOTAL|IMPORTE)\s*[:$]?\s*([\d,]+\.\d{2})", upper)
+        total_match = re.search(r"(?:TOTAL|IMPORTE|TOTAL A PAGAR)\s*[:$]?\s*([\d,]+\.\d{2})", upper)
         subtotal_match = re.search(r"SUBTOTAL\s*[:$]?\s*([\d,]+\.\d{2})", upper)
-        iva_match = re.search(r"IVA\s*[:$]?\s*([\d,]+\.\d{2})", upper)
+        iva_match = re.search(r"(?:IVA|I\.V\.A\.)\s*[:$]?\s*([\d,]+\.\d{2})", upper)
         date_match = re.search(r"(20\d{2}[-/]\d{2}[-/]\d{2}|\d{2}[-/]\d{2}[-/]20\d{2})", text)
         uuid_match = re.search(r"\b([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})\b", upper)
+        folio_match = re.search(r"(?:FOLIO|TICKET|FACTURA|SERIE)\s*[:#-]?\s*([A-Z0-9-]{3,})", upper)
+        payment_form_match = re.search(r"(?:FORMA DE PAGO|FP)\s*[:#-]?\s*([A-Z0-9 ]{2,30})", upper)
+        payment_method_match = re.search(r"(?:METODO DE PAGO|M[EÉ]TODO DE PAGO|MP)\s*[:#-]?\s*([A-Z0-9 ]{2,30})", upper)
 
         return {
             "invoice_date": date_match.group(1) if date_match else None,
             "issuer_rfc": rfc_match.group(1) if rfc_match else None,
-            "issuer_name": None,
-            "folio": None,
+            "issuer_name": self._extract_issuer_name(text),
+            "folio": folio_match.group(1) if folio_match else None,
             "subtotal": self._to_number(subtotal_match.group(1)) if subtotal_match else Decimal("0.00"),
             "iva": self._to_number(iva_match.group(1)) if iva_match else Decimal("0.00"),
             "total": self._to_number(total_match.group(1)) if total_match else Decimal("0.00"),
             "currency": "MXN",
             "suggested_category": self._suggest_category(upper),
             "sat_usage": None,
-            "payment_method": None,
-            "payment_form": None,
+            "payment_method": payment_method_match.group(1).strip() if payment_method_match else None,
+            "payment_form": payment_form_match.group(1).strip() if payment_form_match else None,
             "fiscal_uuid": uuid_match.group(1) if uuid_match else None,
             "confidence": 0.35 if text else 0.0,
             "warnings": [] if text else ["No se pudo extraer texto automáticamente."],
@@ -88,6 +92,14 @@ class ExpenseOCRService:
             return Decimal(normalized)
         except Exception:
             return Decimal("0.00")
+
+    def _extract_issuer_name(self, text: str) -> str | None:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        for line in lines[:8]:
+            upper = line.upper()
+            if any(token in upper for token in ["S.A.", "S DE RL", "SA DE CV", "RESTAURANT", "HOTEL", "GASOLINERA", "SERVICIO", "TIENDA"]):
+                return line[:255]
+        return lines[0][:255] if lines else None
 
     def _suggest_category(self, text: str) -> str:
         if any(token in text for token in ["GASOLINA", "PEMEX", "COMBUSTIBLE"]):

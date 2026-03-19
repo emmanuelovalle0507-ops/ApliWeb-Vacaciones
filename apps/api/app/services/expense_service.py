@@ -7,7 +7,7 @@ from app.models.expense import ExpenseAction, ExpenseActionType, ExpenseDocument
 from app.repositories.expense_repo import ExpenseRepository
 from app.repositories.user_repo import UserRepository
 from app.schemas.auth import UserSummary
-from app.schemas.expense import ExpenseReceiptUpdateIn, ExpenseReportCreateIn, ExpenseReportDecisionIn, ExpenseReportUpdateIn
+from app.schemas.expense import ExpenseReceiptManualCreateIn, ExpenseReceiptUpdateIn, ExpenseReportCreateIn, ExpenseReportDecisionIn, ExpenseReportUpdateIn
 from app.services.expense_file_service import ExpenseFileService
 from app.services.expense_ocr_service import ExpenseOCRService
 
@@ -222,6 +222,54 @@ class ExpenseService:
         self._recalculate_report_totals(report.id)
         if report.status == ExpenseReportStatus.PROCESSING:
             report.status = ExpenseReportStatus.DRAFT
+        self.db.commit()
+        self.db.refresh(receipt)
+        return receipt
+
+    def create_manual_receipt(self, report_id: str, actor: UserSummary, payload: ExpenseReceiptManualCreateIn) -> ExpenseReceipt:
+        report = self._get_report_for_manager(report_id, actor.id)
+        if report.status not in {ExpenseReportStatus.DRAFT, ExpenseReportStatus.NEEDS_CORRECTION, ExpenseReportStatus.PROCESSING}:
+            raise ValueError("No se pueden agregar gastos manuales en el estado actual del reporte.")
+
+        receipt = ExpenseReceipt(
+            expense_report_id=report.id,
+            uploaded_by=actor.id,
+            category_id=payload.category_id,
+            original_filename="manual-entry",
+            stored_filename="manual-entry",
+            storage_path="manual-entry",
+            mime_type="application/manual",
+            file_size=0,
+            document_type=ExpenseDocumentType(payload.document_type),
+            ocr_status=ExpenseReceiptStatus.REVIEW_REQUIRED,
+            invoice_date=payload.invoice_date,
+            issuer_rfc=payload.issuer_rfc,
+            issuer_name=payload.issuer_name,
+            folio=payload.folio,
+            subtotal=payload.subtotal,
+            iva=payload.iva,
+            total=payload.total,
+            currency=payload.currency.upper(),
+            suggested_category=payload.suggested_category,
+            sat_usage=payload.sat_usage,
+            payment_method=payload.payment_method,
+            payment_form=payload.payment_form,
+            fiscal_uuid=payload.fiscal_uuid,
+            is_validated=payload.is_validated,
+            extracted_data={"source": "manual", "notes": payload.notes},
+        )
+        self.repo.add_receipt(receipt)
+        self._recalculate_report_totals(report.id)
+        self.repo.add_action(
+            ExpenseAction(
+                expense_report_id=report.id,
+                expense_receipt_id=receipt.id,
+                actor_id=actor.id,
+                actor_role=actor.role,
+                action_type=ExpenseActionType.RECEIPT_UPLOADED,
+                metadata={"source": "manual", "notes": payload.notes},
+            )
+        )
         self.db.commit()
         self.db.refresh(receipt)
         return receipt

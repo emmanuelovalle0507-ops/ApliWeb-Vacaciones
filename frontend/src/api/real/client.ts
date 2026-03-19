@@ -811,6 +811,48 @@ export async function getAdminExpenseSummary(): Promise<Record<string, number>> 
   return request<Record<string, number>>("/admin/expenses/dashboard/summary");
 }
 
+export async function createManualExpenseReceipt(reportId: string, payload: {
+  documentType?: string;
+  invoiceDate?: string;
+  issuerRfc?: string;
+  issuerName?: string;
+  folio?: string;
+  subtotal: number;
+  iva: number;
+  total: number;
+  currency?: string;
+  suggestedCategory?: string;
+  satUsage?: string;
+  paymentMethod?: string;
+  paymentForm?: string;
+  fiscalUuid?: string;
+  isValidated?: boolean;
+  notes?: string;
+}): Promise<ExpenseReceipt> {
+  const result = await request<BackendExpenseReceipt>(`/manager/expenses/reports/${reportId}/receipts/manual`, {
+    method: "POST",
+    body: JSON.stringify({
+      document_type: payload.documentType ?? "RECEIPT",
+      invoice_date: payload.invoiceDate ?? null,
+      issuer_rfc: payload.issuerRfc ?? null,
+      issuer_name: payload.issuerName ?? null,
+      folio: payload.folio ?? null,
+      subtotal: payload.subtotal,
+      iva: payload.iva,
+      total: payload.total,
+      currency: payload.currency ?? "MXN",
+      suggested_category: payload.suggestedCategory ?? null,
+      sat_usage: payload.satUsage ?? null,
+      payment_method: payload.paymentMethod ?? null,
+      payment_form: payload.paymentForm ?? null,
+      fiscal_uuid: payload.fiscalUuid ?? null,
+      is_validated: payload.isValidated ?? true,
+      notes: payload.notes ?? null,
+    }),
+  });
+  return mapExpenseReceipt(result);
+}
+
 export async function uploadExpenseReceipt(reportId: string, file: File, documentType = "INVOICE"): Promise<ExpenseReceipt> {
   const token = getToken();
   const form = new FormData();

@@ -14,8 +14,25 @@ import { useAuth } from "@/providers/AuthProvider";
 import type { ExpenseReceipt, ExpenseReport } from "@/types";
 
 function money(value: number, currency: string) {
-  return `${value.toFixed(2)} ${currency}`;
+  return `${Number(value || 0).toFixed(2)} ${currency}`;
 }
+
+const manualInitial = {
+  invoiceDate: "",
+  issuerRfc: "",
+  issuerName: "",
+  folio: "",
+  subtotal: "0.00",
+  iva: "0.00",
+  total: "0.00",
+  currency: "MXN",
+  suggestedCategory: "",
+  paymentMethod: "",
+  paymentForm: "",
+  satUsage: "",
+  fiscalUuid: "",
+  notes: "",
+};
 
 export default function ManagerExpensesPage() {
   const { user } = useAuth();
@@ -26,6 +43,8 @@ export default function ManagerExpensesPage() {
   const [selectedReportId, setSelectedReportId] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedReceiptId, setSelectedReceiptId] = useState<string>("");
+  const [captureMode, setCaptureMode] = useState<"IA" | "MANUAL">("IA");
+  const [manualForm, setManualForm] = useState(manualInitial);
 
   const reportsQ = useQuery({
     queryKey: ["expenses.manager.reports", user?.id],
@@ -67,6 +86,35 @@ export default function ManagerExpensesPage() {
       toast("success", "Comprobante cargado correctamente.");
     },
     onError: (err) => toast("error", err instanceof Error ? err.message : "No se pudo subir el comprobante"),
+  });
+
+  const manualMut = useMutation({
+    mutationFn: async () => {
+      if (!selectedReportId) throw new Error("Selecciona un reporte.");
+      return api.expenses.manager.createManualReceipt(selectedReportId, {
+        invoiceDate: manualForm.invoiceDate || undefined,
+        issuerRfc: manualForm.issuerRfc || undefined,
+        issuerName: manualForm.issuerName || undefined,
+        folio: manualForm.folio || undefined,
+        subtotal: Number(manualForm.subtotal || 0),
+        iva: Number(manualForm.iva || 0),
+        total: Number(manualForm.total || 0),
+        currency: manualForm.currency || "MXN",
+        suggestedCategory: manualForm.suggestedCategory || undefined,
+        paymentMethod: manualForm.paymentMethod || undefined,
+        paymentForm: manualForm.paymentForm || undefined,
+        satUsage: manualForm.satUsage || undefined,
+        fiscalUuid: manualForm.fiscalUuid || undefined,
+        notes: manualForm.notes || undefined,
+      });
+    },
+    onSuccess: () => {
+      setManualForm(manualInitial);
+      qc.invalidateQueries({ queryKey: ["expenses.manager.reports"] });
+      qc.invalidateQueries({ queryKey: ["expenses.manager.report", selectedReportId] });
+      toast("success", "Gasto manual agregado correctamente.");
+    },
+    onError: (err) => toast("error", err instanceof Error ? err.message : "No se pudo guardar el gasto manual"),
   });
 
   const submitMut = useMutation({
@@ -119,7 +167,7 @@ export default function ManagerExpensesPage() {
   ];
 
   const receiptColumns = [
-    { key: "originalFilename", header: "Archivo" },
+    { key: "originalFilename", header: "Archivo / fuente", render: (row: ExpenseReceipt) => row.originalFilename === "manual-entry" ? "Captura manual" : row.originalFilename },
     { key: "ocrStatus", header: "OCR" },
     { key: "issuerName", header: "Proveedor", render: (row: ExpenseReceipt) => row.issuerName || "—" },
     { key: "total", header: "Total", render: (row: ExpenseReceipt) => money(row.total, row.currency) },
@@ -131,7 +179,7 @@ export default function ManagerExpensesPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Viáticos y gastos</h1>
-          <p className="text-sm text-slate-600 mt-1">Crea reportes, sube comprobantes, revisa extracción y envía a Finanzas.</p>
+          <p className="text-sm text-slate-600 mt-1">Carga ticket/factura con IA o captura manualmente el gasto con los datos necesarios para facturación en México.</p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
@@ -145,17 +193,47 @@ export default function ManagerExpensesPage() {
           </Card>
 
           <Card>
-            <CardHeader><h2 className="text-lg font-semibold text-slate-900">Subir comprobante</h2></CardHeader>
+            <CardHeader><h2 className="text-lg font-semibold text-slate-900">Captura de gasto</h2></CardHeader>
             <CardBody className="space-y-4">
               <select className="w-full px-4 py-2.5 border rounded-lg text-sm border-gray-300" value={selectedReportId} onChange={(e) => setSelectedReportId(e.target.value)}>
                 <option value="">Selecciona un reporte</option>
                 {reports.map((report) => <option key={report.id} value={report.id}>{report.title}</option>)}
               </select>
-              <input type="file" accept="image/*,.pdf,.xml,text/xml,application/xml" onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)} />
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={() => uploadMut.mutate()} loading={uploadMut.isPending} disabled={!selectedReportId || !selectedFile}>Subir comprobante</Button>
-                <Button variant="secondary" onClick={() => submitMut.mutate()} loading={submitMut.isPending} disabled={!selectedReportId || !detail || receipts.length === 0}>Enviar a Finanzas</Button>
+              <div className="flex gap-3">
+                <Button variant={captureMode === "IA" ? "primary" : "secondary"} onClick={() => setCaptureMode("IA")}>Con IA</Button>
+                <Button variant={captureMode === "MANUAL" ? "primary" : "secondary"} onClick={() => setCaptureMode("MANUAL")}>Manual</Button>
               </div>
+
+              {captureMode === "IA" ? (
+                <div className="space-y-4">
+                  <input type="file" accept="image/*,.pdf,.xml,text/xml,application/xml" onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)} />
+                  <p className="text-xs text-slate-500">La IA intentará extraer: fecha, RFC, razón social, folio, subtotal, IVA, total, método/forma de pago y UUID fiscal si existe.</p>
+                  <Button onClick={() => uploadMut.mutate()} loading={uploadMut.isPending} disabled={!selectedReportId || !selectedFile}>Subir ticket / factura</Button>
+                </div>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Input label="Fecha" type="date" value={manualForm.invoiceDate} onChange={(e) => setManualForm({ ...manualForm, invoiceDate: e.target.value })} />
+                  <Input label="RFC" value={manualForm.issuerRfc} onChange={(e) => setManualForm({ ...manualForm, issuerRfc: e.target.value })} placeholder="XAXX010101000" />
+                  <Input label="Razón social / proveedor" value={manualForm.issuerName} onChange={(e) => setManualForm({ ...manualForm, issuerName: e.target.value })} placeholder="Proveedor o razón social" />
+                  <Input label="Folio / ticket" value={manualForm.folio} onChange={(e) => setManualForm({ ...manualForm, folio: e.target.value })} placeholder="Folio" />
+                  <Input label="Subtotal" type="number" step="0.01" value={manualForm.subtotal} onChange={(e) => setManualForm({ ...manualForm, subtotal: e.target.value })} />
+                  <Input label="IVA" type="number" step="0.01" value={manualForm.iva} onChange={(e) => setManualForm({ ...manualForm, iva: e.target.value })} />
+                  <Input label="Total" type="number" step="0.01" value={manualForm.total} onChange={(e) => setManualForm({ ...manualForm, total: e.target.value })} />
+                  <Input label="Moneda" value={manualForm.currency} onChange={(e) => setManualForm({ ...manualForm, currency: e.target.value.toUpperCase() })} />
+                  <Input label="Categoría" value={manualForm.suggestedCategory} onChange={(e) => setManualForm({ ...manualForm, suggestedCategory: e.target.value })} placeholder="gasolina, transporte, comida..." />
+                  <Input label="Método de pago" value={manualForm.paymentMethod} onChange={(e) => setManualForm({ ...manualForm, paymentMethod: e.target.value })} placeholder="PUE / PPD / Tarjeta..." />
+                  <Input label="Forma de pago" value={manualForm.paymentForm} onChange={(e) => setManualForm({ ...manualForm, paymentForm: e.target.value })} placeholder="01, 03, 04..." />
+                  <Input label="Uso CFDI" value={manualForm.satUsage} onChange={(e) => setManualForm({ ...manualForm, satUsage: e.target.value })} placeholder="G03, S01..." />
+                  <Input label="UUID fiscal" value={manualForm.fiscalUuid} onChange={(e) => setManualForm({ ...manualForm, fiscalUuid: e.target.value })} placeholder="UUID si aplica" />
+                  <div className="md:col-span-2">
+                    <Input label="Notas" value={manualForm.notes} onChange={(e) => setManualForm({ ...manualForm, notes: e.target.value })} placeholder="Observaciones del gasto" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Button onClick={() => manualMut.mutate()} loading={manualMut.isPending} disabled={!selectedReportId || !manualForm.issuerName || !manualForm.total}>Guardar gasto manual</Button>
+                  </div>
+                </div>
+              )}
+
               {detail && (
                 <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-600">
                   <p><span className="font-medium text-slate-800">Estado:</span> {detail.status}</p>
@@ -163,6 +241,7 @@ export default function ManagerExpensesPage() {
                   {detail.financeComment && <p><span className="font-medium text-slate-800">Comentario Finanzas:</span> {detail.financeComment}</p>}
                 </div>
               )}
+              <Button variant="secondary" onClick={() => submitMut.mutate()} loading={submitMut.isPending} disabled={!selectedReportId || !detail || receipts.length === 0}>Enviar a Finanzas</Button>
             </CardBody>
           </Card>
         </div>
@@ -176,19 +255,19 @@ export default function ManagerExpensesPage() {
 
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <Card>
-            <CardHeader><h2 className="text-lg font-semibold text-slate-900">Comprobantes del reporte</h2></CardHeader>
+            <CardHeader><h2 className="text-lg font-semibold text-slate-900">Comprobantes / gastos del reporte</h2></CardHeader>
             <CardBody className="space-y-4">
-              <Table columns={receiptColumns} data={receipts} isLoading={detailQ.isLoading} emptyMessage="Este reporte aún no tiene comprobantes." />
+              <Table columns={receiptColumns} data={receipts} isLoading={detailQ.isLoading} emptyMessage="Este reporte aún no tiene gastos capturados." />
               {receipts.length > 0 && (
                 <select className="w-full px-4 py-2.5 border rounded-lg text-sm border-gray-300" value={selectedReceiptId} onChange={(e) => setSelectedReceiptId(e.target.value)}>
-                  {receipts.map((receipt) => <option key={receipt.id} value={receipt.id}>{receipt.originalFilename}</option>)}
+                  {receipts.map((receipt) => <option key={receipt.id} value={receipt.id}>{receipt.originalFilename === "manual-entry" ? `Manual - ${receipt.issuerName || receipt.id}` : receipt.originalFilename}</option>)}
                 </select>
               )}
             </CardBody>
           </Card>
 
           <Card>
-            <CardHeader><h2 className="text-lg font-semibold text-slate-900">Detalle del comprobante</h2></CardHeader>
+            <CardHeader><h2 className="text-lg font-semibold text-slate-900">Detalle del ticket / factura</h2></CardHeader>
             <CardBody className="space-y-4">
               {selectedReceipt ? (
                 <>
@@ -200,16 +279,19 @@ export default function ManagerExpensesPage() {
                     <p><span className="font-medium">Subtotal:</span> {money(selectedReceipt.subtotal, selectedReceipt.currency)}</p>
                     <p><span className="font-medium">IVA:</span> {money(selectedReceipt.iva, selectedReceipt.currency)}</p>
                     <p><span className="font-medium">Total:</span> {money(selectedReceipt.total, selectedReceipt.currency)}</p>
+                    <p><span className="font-medium">Forma de pago:</span> {selectedReceipt.paymentForm || "—"}</p>
+                    <p><span className="font-medium">Método de pago:</span> {selectedReceipt.paymentMethod || "—"}</p>
+                    <p><span className="font-medium">UUID fiscal:</span> {selectedReceipt.fiscalUuid || "—"}</p>
                     <p><span className="font-medium">Categoría sugerida:</span> {selectedReceipt.suggestedCategory || "—"}</p>
                     <p><span className="font-medium">Confianza IA:</span> {selectedReceipt.aiConfidence ?? "—"}</p>
                   </div>
                   <div className="flex flex-wrap gap-3">
-                    <Button variant="secondary" onClick={() => analyzeMut.mutate()} loading={analyzeMut.isPending}>Re-analizar</Button>
+                    <Button variant="secondary" onClick={() => analyzeMut.mutate()} loading={analyzeMut.isPending} disabled={selectedReceipt.originalFilename === "manual-entry"}>Re-analizar</Button>
                     <Button onClick={() => validateMut.mutate()} loading={validateMut.isPending}>Marcar validado</Button>
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-slate-500">Selecciona un comprobante para ver el detalle.</p>
+                <p className="text-sm text-slate-500">Selecciona un comprobante o gasto manual para ver el detalle.</p>
               )}
             </CardBody>
           </Card>

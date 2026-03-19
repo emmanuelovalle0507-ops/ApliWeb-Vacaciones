@@ -108,6 +108,26 @@ class ExpenseReportUpdateIn(BaseModel):
     currency: str | None = Field(None, min_length=3, max_length=10)
 
 
+class ExpenseReceiptManualCreateIn(BaseModel):
+    document_type: str = Field(default="RECEIPT", pattern=r"^(INVOICE|RECEIPT|TICKET|CFDI_XML|OTHER)$")
+    category_id: str | None = None
+    invoice_date: date | None = None
+    issuer_rfc: str | None = Field(None, max_length=20)
+    issuer_name: str | None = Field(None, max_length=255)
+    folio: str | None = Field(None, max_length=100)
+    subtotal: Decimal = Field(default=Decimal("0.00"))
+    iva: Decimal = Field(default=Decimal("0.00"))
+    total: Decimal = Field(default=Decimal("0.00"))
+    currency: str = Field(default="MXN", min_length=3, max_length=10)
+    suggested_category: str | None = Field(None, max_length=80)
+    sat_usage: str | None = Field(None, max_length=20)
+    payment_method: str | None = Field(None, max_length=50)
+    payment_form: str | None = Field(None, max_length=50)
+    fiscal_uuid: str | None = Field(None, max_length=100)
+    is_validated: bool = True
+    notes: str | None = None
+
+
 class ExpenseReceiptUpdateIn(BaseModel):
     category_id: str | None = None
     invoice_date: date | None = None

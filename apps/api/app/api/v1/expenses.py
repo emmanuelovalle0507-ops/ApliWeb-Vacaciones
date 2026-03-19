@@ -8,6 +8,7 @@ from app.repositories.expense_repo import ExpenseRepository
 from app.schemas.auth import UserSummary
 from app.schemas.expense import (
     ExpenseCategoryOut,
+    ExpenseReceiptManualCreateIn,
     ExpenseReceiptOut,
     ExpenseReceiptUpdateIn,
     ExpenseReportCreateIn,
@@ -113,6 +114,23 @@ async def upload_receipt(
     service = ExpenseService(db)
     try:
         receipt = await service.upload_receipt(report_id, current_user, file, document_type=document_type)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return expense_receipt_to_out(receipt)
+
+
+@router.post("/manager/expenses/reports/{report_id}/receipts/manual", response_model=ExpenseReceiptOut)
+def create_manual_receipt(
+    report_id: str,
+    payload: ExpenseReceiptManualCreateIn,
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+) -> ExpenseReceiptOut:
+    service = ExpenseService(db)
+    try:
+        receipt = service.create_manual_receipt(report_id, current_user, payload)
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
