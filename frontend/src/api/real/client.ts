@@ -733,6 +733,11 @@ export async function listManagerExpenseReports(): Promise<ExpenseReport[]> {
   return result.items.map(mapExpenseReport);
 }
 
+export async function getManagerExpenseReport(reportId: string): Promise<ExpenseReport> {
+  const result = await request<BackendExpenseReport>(`/manager/expenses/reports/${reportId}`);
+  return mapExpenseReport(result);
+}
+
 export async function createManagerExpenseReport(payload: {
   title: string;
   description?: string;
@@ -765,6 +770,11 @@ export async function listFinanceExpenseReports(status?: string): Promise<Expens
   const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
   const result = await request<BackendExpenseReportList>(`/finance/expenses/reports${suffix}`);
   return result.items.map(mapExpenseReport);
+}
+
+export async function getFinanceExpenseReport(reportId: string): Promise<ExpenseReport> {
+  const result = await request<BackendExpenseReport>(`/finance/expenses/reports/${reportId}`);
+  return mapExpenseReport(result);
 }
 
 export async function financeApproveExpenseReport(reportId: string, comment?: string): Promise<ExpenseReport> {
@@ -806,6 +816,44 @@ export async function uploadExpenseReceipt(reportId: string, file: File, documen
     throw new Error(typeof body.detail === "string" ? body.detail : "Error al subir comprobante");
   }
   const result = (await res.json()) as BackendExpenseReceipt;
+  return mapExpenseReceipt(result);
+}
+
+export async function submitManagerExpenseReport(reportId: string): Promise<ExpenseReport> {
+  const result = await request<BackendExpenseReport>(`/manager/expenses/reports/${reportId}/submit`, {
+    method: "POST",
+  });
+  return mapExpenseReport(result);
+}
+
+export async function analyzeExpenseReceipt(receiptId: string): Promise<ExpenseReceipt> {
+  const result = await request<BackendExpenseReceipt>(`/manager/expenses/receipts/${receiptId}/analyze`, {
+    method: "POST",
+  });
+  return mapExpenseReceipt(result);
+}
+
+export async function updateExpenseReceipt(receiptId: string, payload: Partial<ExpenseReceipt>): Promise<ExpenseReceipt> {
+  const result = await request<BackendExpenseReceipt>(`/manager/expenses/receipts/${receiptId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      category_id: payload.categoryId ?? undefined,
+      invoice_date: payload.invoiceDate ?? undefined,
+      issuer_rfc: payload.issuerRfc ?? undefined,
+      issuer_name: payload.issuerName ?? undefined,
+      folio: payload.folio ?? undefined,
+      subtotal: payload.subtotal ?? undefined,
+      iva: payload.iva ?? undefined,
+      total: payload.total ?? undefined,
+      currency: payload.currency ?? undefined,
+      suggested_category: payload.suggestedCategory ?? undefined,
+      sat_usage: payload.satUsage ?? undefined,
+      payment_method: payload.paymentMethod ?? undefined,
+      payment_form: payload.paymentForm ?? undefined,
+      fiscal_uuid: payload.fiscalUuid ?? undefined,
+      is_validated: payload.isValidated ?? undefined,
+    }),
+  });
   return mapExpenseReceipt(result);
 }
 

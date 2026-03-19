@@ -78,11 +78,16 @@ export const api = {
     categories: { list: impl.listExpenseCategories },
     manager: {
       listReports: impl.listManagerExpenseReports,
+      getReport: impl.getManagerExpenseReport,
       createReport: impl.createManagerExpenseReport,
       uploadReceipt: impl.uploadExpenseReceipt,
+      submitReport: impl.submitManagerExpenseReport,
+      analyzeReceipt: impl.analyzeExpenseReceipt,
+      updateReceipt: impl.updateExpenseReceipt,
     },
     finance: {
       listReports: impl.listFinanceExpenseReports,
+      getReport: impl.getFinanceExpenseReport,
       approve: impl.financeApproveExpenseReport,
       reject: impl.financeRejectExpenseReport,
       requestCorrection: impl.financeRequestExpenseCorrection,
