@@ -801,6 +801,16 @@ export async function financeRequestExpenseCorrection(reportId: string, comment?
   return mapExpenseReport(result);
 }
 
+export async function listAdminExpenseReports(status?: string): Promise<ExpenseReport[]> {
+  const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
+  const result = await request<BackendExpenseReportList>(`/admin/expenses/reports${suffix}`);
+  return result.items.map(mapExpenseReport);
+}
+
+export async function getAdminExpenseSummary(): Promise<Record<string, number>> {
+  return request<Record<string, number>>("/admin/expenses/dashboard/summary");
+}
+
 export async function uploadExpenseReceipt(reportId: string, file: File, documentType = "INVOICE"): Promise<ExpenseReceipt> {
   const token = getToken();
   const form = new FormData();

@@ -92,6 +92,10 @@ export const api = {
       reject: impl.financeRejectExpenseReport,
       requestCorrection: impl.financeRequestExpenseCorrection,
     },
+    admin: {
+      listReports: impl.listAdminExpenseReports,
+      summary: impl.getAdminExpenseSummary,
+    },
   },
 };
 
