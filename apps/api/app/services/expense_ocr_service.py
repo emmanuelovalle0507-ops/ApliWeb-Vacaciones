@@ -93,6 +93,15 @@ class ExpenseOCRService:
         except Exception:
             return Decimal("0.00")
 
+    def _normalize_json(self, value: Any):
+        if isinstance(value, Decimal):
+            return float(value)
+        if isinstance(value, dict):
+            return {k: self._normalize_json(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._normalize_json(v) for v in value]
+        return value
+
     def _extract_issuer_name(self, text: str) -> str | None:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         for line in lines[:8]:
