@@ -24,6 +24,24 @@ class ExpenseOCRService:
         fallback["ocr_provider"] = self.provider if self.enabled else "disabled"
         fallback["ocr_status"] = "PROCESSED" if text else "REVIEW_REQUIRED"
 
+        if self.enabled and mime_type.startswith("image/"):
+            system = (
+                "Extrae datos de facturación/viáticos para México desde la imagen. "
+                "Devuelve SOLO JSON válido con: invoice_date, issuer_rfc, issuer_name, folio, subtotal, iva, total, currency, suggested_category, sat_usage, payment_method, payment_form, fiscal_uuid, confidence, warnings."
+            )
+            user = "Lee el ticket o factura y extrae los campos fiscales y operativos mexicanos más útiles para facturación."
+            parsed = self.llm.chat_with_image(system, user, storage_path, temperature=0.0)
+            if parsed:
+                try:
+                    data = json.loads(parsed)
+                    if isinstance(data, dict):
+                        merged = {**fallback, **data}
+                        merged["ocr_provider"] = self.provider
+                        merged["ocr_status"] = "PROCESSED"
+                        return self._normalize_json(merged)
+                except json.JSONDecodeError:
+                    pass
+
         if not self.enabled or not text:
             return fallback
 

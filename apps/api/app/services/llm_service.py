@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import mimetypes
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from urllib import error, request
 
 from app.core.config import settings
@@ -85,6 +88,30 @@ class LLMService:
             [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message},
+            ],
+            temperature=temperature,
+        )
+        return result.text if result else None
+
+    def chat_with_image(self, system_prompt: str, user_message: str, image_path: str, temperature: float = 0.0) -> str | None:
+        if not self.enabled:
+            return None
+        path = Path(image_path)
+        if not path.exists() or not path.is_file():
+            return None
+        mime_type, _ = mimetypes.guess_type(str(path))
+        mime_type = mime_type or "image/png"
+        image_b64 = base64.b64encode(path.read_bytes()).decode("utf-8")
+        result = self._chat(
+            [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": user_message},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{image_b64}"}},
+                    ],
+                },
             ],
             temperature=temperature,
         )
