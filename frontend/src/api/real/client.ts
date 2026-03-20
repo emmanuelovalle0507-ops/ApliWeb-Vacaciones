@@ -35,9 +35,11 @@ function resolveBaseUrl() {
 
   if (envBase && !envBase.includes("localhost")) return envBase;
 
-  const { protocol, hostname } = window.location;
-  const apiHost = hostname === "localhost" || hostname === "127.0.0.1" ? "localhost" : hostname;
-  return `${protocol}//${apiHost}:8000/api/v1`;
+  const { hostname } = window.location;
+  const isLocal = hostname === "localhost" || hostname === "127.0.0.1";
+  const apiHost = isLocal ? "localhost" : hostname;
+  const apiProtocol = isLocal ? "http:" : window.location.protocol;
+  return `${apiProtocol}//${apiHost}:8000/api/v1`;
 }
 
 const BASE_URL = resolveBaseUrl();

@@ -79,11 +79,12 @@ export default function ManagerExpensesPage() {
       if (!selectedReportId || !selectedFile) throw new Error("Selecciona reporte y archivo.");
       return api.expenses.manager.uploadReceipt(selectedReportId, selectedFile);
     },
-    onSuccess: () => {
+    onSuccess: (receipt) => {
       setSelectedFile(null);
+      setSelectedReceiptId(receipt.id);
       qc.invalidateQueries({ queryKey: ["expenses.manager.reports"] });
       qc.invalidateQueries({ queryKey: ["expenses.manager.report", selectedReportId] });
-      toast("success", "Comprobante cargado correctamente.");
+      toast("success", "Comprobante cargado correctamente. Revisa la extracción debajo.");
     },
     onError: (err) => toast("error", err instanceof Error ? err.message : "No se pudo subir el comprobante"),
   });
@@ -295,6 +296,20 @@ export default function ManagerExpensesPage() {
                     <p><span className="font-medium">UUID fiscal:</span> {selectedReceipt.fiscalUuid || "—"}</p>
                     <p><span className="font-medium">Categoría sugerida:</span> {selectedReceipt.suggestedCategory || "—"}</p>
                     <p><span className="font-medium">Confianza IA:</span> {selectedReceipt.aiConfidence ?? "—"}</p>
+                  </div>
+                  <div className="rounded-xl border border-seekop-200 bg-seekop-50/60 p-4 text-sm text-slate-700 space-y-2">
+                    <p className="font-semibold text-slate-900">Extracción detectada</p>
+                    <p>Fecha: {selectedReceipt.invoiceDate || "—"}</p>
+                    <p>RFC: {selectedReceipt.issuerRfc || "—"}</p>
+                    <p>Razón social: {selectedReceipt.issuerName || "—"}</p>
+                    <p>Folio: {selectedReceipt.folio || "—"}</p>
+                    <p>Subtotal: {money(selectedReceipt.subtotal, selectedReceipt.currency)}</p>
+                    <p>IVA: {money(selectedReceipt.iva, selectedReceipt.currency)}</p>
+                    <p>Total: {money(selectedReceipt.total, selectedReceipt.currency)}</p>
+                    <p>Forma de pago: {selectedReceipt.paymentForm || "—"}</p>
+                    <p>Método de pago: {selectedReceipt.paymentMethod || "—"}</p>
+                    <p>UUID fiscal: {selectedReceipt.fiscalUuid || "—"}</p>
+                    <p>Categoría sugerida: {selectedReceipt.suggestedCategory || "—"}</p>
                   </div>
                   <div className="flex flex-wrap gap-3">
                     <Button variant="secondary" onClick={() => analyzeMut.mutate()} loading={analyzeMut.isPending} disabled={selectedReceipt.originalFilename === "manual-entry"}>Re-analizar</Button>
