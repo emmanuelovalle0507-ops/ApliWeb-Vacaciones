@@ -20,7 +20,7 @@ class ExpenseOCRService:
     def analyze(self, *, storage_path: str, mime_type: str, raw_text: str | None = None) -> dict:
         text = raw_text or ""
         suffix = Path(storage_path).suffix.lower()
-        fallback = self._fallback_extract(text)
+        fallback = self._normalize_json(self._fallback_extract(text))
         fallback["ocr_provider"] = self.provider if self.enabled else "disabled"
         fallback["ocr_status"] = "PROCESSED" if text else "REVIEW_REQUIRED"
 
