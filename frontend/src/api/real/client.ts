@@ -29,7 +29,18 @@ import type {
   ExpenseReport,
 } from "@/types";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1";
+function resolveBaseUrl() {
+  const envBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (typeof window === "undefined") return envBase || "http://localhost:8000/api/v1";
+
+  if (envBase && !envBase.includes("localhost")) return envBase;
+
+  const { protocol, hostname } = window.location;
+  const apiHost = hostname === "localhost" || hostname === "127.0.0.1" ? "localhost" : hostname;
+  return `${protocol}//${apiHost}:8000/api/v1`;
+}
+
+const BASE_URL = resolveBaseUrl();
 
 type BackendUserSummary = {
   id: string;
@@ -858,11 +869,18 @@ export async function uploadExpenseReceipt(reportId: string, file: File, documen
   const form = new FormData();
   form.append("file", file);
   form.append("document_type", documentType);
-  const res = await fetch(`${BASE_URL}/manager/expenses/reports/${reportId}/receipts`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: form,
-  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}/manager/expenses/reports/${reportId}/receipts`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+  } catch {
+    throw new Error(`No se pudo subir el archivo al servidor (${BASE_URL}).`);
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(typeof body.detail === "string" ? body.detail : "Error al subir comprobante");

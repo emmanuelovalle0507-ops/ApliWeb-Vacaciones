@@ -206,7 +206,18 @@ export default function ManagerExpensesPage() {
 
               {captureMode === "IA" ? (
                 <div className="space-y-4">
-                  <input type="file" accept="image/*,.pdf,.xml,text/xml,application/xml" onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)} />
+                  <div className="rounded-xl border-2 border-dashed border-seekop-200 bg-seekop-50/50 p-4">
+                    <label htmlFor="expense-file" className="block text-sm font-medium text-slate-800 mb-2">
+                      Ticket / factura / XML
+                    </label>
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                      <label htmlFor="expense-file" className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-white border border-seekop-200 px-4 py-2 text-sm font-medium text-seekop-700 hover:bg-seekop-50">
+                        Seleccionar archivo
+                      </label>
+                      <input id="expense-file" className="hidden" type="file" accept="image/*,.pdf,.xml,text/xml,application/xml" onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)} />
+                      <span className="text-sm text-slate-600 break-all">{selectedFile ? selectedFile.name : "Ningún archivo seleccionado"}</span>
+                    </div>
+                  </div>
                   <p className="text-xs text-slate-500">La IA intentará extraer: fecha, RFC, razón social, folio, subtotal, IVA, total, método/forma de pago y UUID fiscal si existe.</p>
                   <Button onClick={() => uploadMut.mutate()} loading={uploadMut.isPending} disabled={!selectedReportId || !selectedFile}>Subir ticket / factura</Button>
                 </div>
