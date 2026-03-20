@@ -12,6 +12,7 @@ import {
 import api from "@/api/client";
 import type { ExpenseReceipt, ExpenseReport } from "@/api/real/client";
 import { useToast } from "@/components/ui/Toast";
+import AIChatPanel from "@/components/ai/AIChatPanel";
 
 const API_BASE = "/api/v1";
 
@@ -261,6 +262,9 @@ export default function FinanceDashboardPage() {
           </div>
         </div>
 
+        {/* AI Chat */}
+        <AIChatPanel title="Asistente de Gastos" />
+
         {previewReceipt && <ReceiptPreviewModal receipt={previewReceipt} onClose={() => setPreviewReceipt(null)} />}
       </div>
     </RoleGuard>
@@ -400,7 +404,7 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
                           )}
                         </div>
                       </td>
-                      <td className="py-2 pr-3 font-medium text-gray-700">{r.vendorName || r.fileName}{isManual && <span className="ml-1 text-[9px] text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded">Manual</span>}</td>
+                      <td className="py-2 pr-3 font-medium text-gray-700">{r.vendorName || r.fileName}{isManual && <span className="ml-1 text-[9px] text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded">Manual</span>}{r.isCfdi && <span className="ml-1 text-[9px] text-blue-700 bg-blue-50 px-1 py-0.5 rounded border border-blue-200">CFDI</span>}{r.rfcEmisor && <span className="ml-1 text-[9px] text-gray-500 font-mono">{r.rfcEmisor}</span>}</td>
                       <td className="py-2 pr-3 text-gray-500">{r.receiptDate || "—"}</td>
                       <td className="py-2 pr-3 text-gray-500">{r.category ? (CATEGORY_LABELS[r.category] ?? r.category) : "—"}</td>
                       <td className="py-2 pr-3 text-gray-500">{r.paymentMethod || "—"}</td>
@@ -511,7 +515,10 @@ function ReceiptPreviewModal({ receipt, onClose }: { receipt: ExpenseReceipt; on
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">{receipt.vendorName || receipt.fileName}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-gray-900">{receipt.vendorName || receipt.fileName}</h2>
+              {receipt.isCfdi && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200">CFDI</span>}
+            </div>
             <div className="flex items-center gap-3 mt-0.5 text-xs">
               {receipt.totalAmount != null && (
                 <span className="font-semibold text-gray-700">${receipt.totalAmount.toFixed(2)} {receipt.currency}</span>
@@ -553,6 +560,23 @@ function ReceiptPreviewModal({ receipt, onClose }: { receipt: ExpenseReceipt; on
             </div>
           )}
         </div>
+
+        {receipt.isCfdi && (
+          <div className="px-6 py-4 border-t border-gray-100 bg-blue-50/60">
+            <h4 className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-2">Datos Fiscales (CFDI)</h4>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+              {receipt.uuidFiscal && (
+                <div><span className="text-blue-600 font-medium">UUID:</span> <span className="text-gray-800 font-mono text-[11px]">{receipt.uuidFiscal}</span></div>
+              )}
+              {receipt.rfcEmisor && (
+                <div><span className="text-blue-600 font-medium">RFC Emisor:</span> <span className="text-gray-800 font-mono">{receipt.rfcEmisor}</span></div>
+              )}
+              {receipt.rfcReceptor && (
+                <div><span className="text-blue-600 font-medium">RFC Receptor:</span> <span className="text-gray-800 font-mono">{receipt.rfcReceptor}</span></div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

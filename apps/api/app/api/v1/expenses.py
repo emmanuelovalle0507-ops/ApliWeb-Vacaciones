@@ -115,6 +115,11 @@ def _receipt_to_out(r: ExpenseReceipt) -> ReceiptOut:
         paymentMethod=r.payment_method,
         category=r.category.value if r.category else None,
         description=r.description,
+        isCfdi=r.is_cfdi,
+        uuidFiscal=r.uuid_fiscal,
+        rfcEmisor=r.rfc_emisor,
+        rfcReceptor=r.rfc_receptor,
+        cfdiXmlUrl=f"/api/v1/expenses/files/{r.cfdi_xml_url}" if r.cfdi_xml_url else None,
         createdAt=r.created_at,
         updatedAt=r.updated_at,
     )
@@ -178,15 +183,25 @@ async def upload_receipts(
     audit = AuditRepository(db)
     results: list[ReceiptOut] = []
 
+    non_cfdi_ids: list[str] = []
+
     for f in files:
         data = await f.read()
         content_type = f.content_type or "application/octet-stream"
+        # Browsers may send XML files with wrong content type — normalize
+        if f.filename and f.filename.lower().endswith(".xml") and content_type not in ("text/xml", "application/xml"):
+            content_type = "text/xml"
         try:
             _storage.validate(content_type, len(data), data)
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
         key = _storage.save(data, current_user.id, f.filename or "file", content_type)
+
+        is_xml = content_type in ("text/xml", "application/xml") or (
+            f.filename and f.filename.lower().endswith(".xml")
+        )
+        is_pdf = content_type == "application/pdf"
 
         receipt = ExpenseReceipt(
             owner_id=current_user.id,
@@ -196,6 +211,53 @@ async def upload_receipts(
             file_size_bytes=len(data),
             extraction_status=ExtractionStatus.PENDING,
         )
+
+        cfdi = None
+
+        # If XML, attempt CFDI parsing immediately
+        if is_xml:
+            from app.services.cfdi_parser_service import parse_cfdi_xml
+            try:
+                cfdi = parse_cfdi_xml(data)
+            except ValueError as exc:
+                receipt.extraction_status = ExtractionStatus.FAILED
+                receipt.extraction_json = {"error": f"CFDI parse error: {exc}"}
+
+        # If PDF, try to extract embedded CFDI XML first
+        elif is_pdf:
+            from app.services.cfdi_parser_service import extract_cfdi_from_pdf
+            cfdi = extract_cfdi_from_pdf(data)
+
+        # If we got CFDI data (from XML or embedded in PDF), populate fields
+        if cfdi is not None:
+            receipt.is_cfdi = True
+            receipt.uuid_fiscal = cfdi.uuid_fiscal
+            receipt.rfc_emisor = cfdi.rfc_emisor
+            receipt.rfc_receptor = cfdi.rfc_receptor
+            receipt.cfdi_xml_url = key
+            receipt.vendor_name = cfdi.nombre_emisor
+            receipt.receipt_date = cfdi.fecha
+            receipt.total_amount = cfdi.total
+            receipt.tax_amount = cfdi.iva
+            receipt.currency = cfdi.currency or "MXN"
+            receipt.payment_method = cfdi.metodo_pago
+            receipt.description = "; ".join(
+                c.get("descripcion", "") for c in cfdi.conceptos[:5]
+            )[:500] if cfdi.conceptos else None
+            receipt.extraction_status = ExtractionStatus.DONE
+            receipt.extraction_confidence = 1.0
+            receipt.extraction_json = {
+                "source": "cfdi_xml" if is_xml else "cfdi_pdf_embedded",
+                "version": cfdi.version,
+                "uuid_fiscal": cfdi.uuid_fiscal,
+                "rfc_emisor": cfdi.rfc_emisor,
+                "rfc_receptor": cfdi.rfc_receptor,
+                "uso_cfdi": cfdi.uso_cfdi,
+                "metodo_pago": cfdi.metodo_pago,
+                "forma_pago": cfdi.forma_pago,
+                "conceptos": cfdi.conceptos,
+            }
+
         receipt = repo.add(receipt)
 
         audit.log(
@@ -203,15 +265,20 @@ async def upload_receipts(
             action="RECEIPT_UPLOADED",
             entity_type="expense_receipt",
             entity_id=str(receipt.id),
-            metadata={"file_name": f.filename, "size": len(data)},
+            metadata={"file_name": f.filename, "size": len(data), "is_cfdi": cfdi is not None},
         )
+
+        # If no CFDI was extracted, queue for AI extraction
+        if cfdi is None and receipt.extraction_status == ExtractionStatus.PENDING:
+            non_cfdi_ids.append(str(receipt.id))
+
         results.append(_receipt_to_out(receipt))
 
     db.commit()
 
-    # Dispatch background AI extraction for each receipt
-    for r in results:
-        background_tasks.add_task(_run_extraction, r.id)
+    # Dispatch background AI extraction only for non-CFDI files
+    for rid in non_cfdi_ids:
+        background_tasks.add_task(_run_extraction, rid)
 
     return results
 

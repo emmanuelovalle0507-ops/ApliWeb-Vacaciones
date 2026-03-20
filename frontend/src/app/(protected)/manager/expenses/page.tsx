@@ -234,14 +234,14 @@ function TicketsTab({ onViewDetail }: { onViewDetail: (r: ExpenseReceipt) => voi
             onClick={() => fileInputRef.current?.click()}
             className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${isDragging ? "border-seekop-500 bg-seekop-50 scale-[1.01]" : "border-gray-300 hover:border-seekop-400 hover:bg-gray-50"}`}
           >
-            <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={onFileSelect} />
+            <input ref={fileInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp,application/pdf,text/xml,application/xml,.xml" className="hidden" onChange={onFileSelect} />
             {uploading ? (
               <div className="flex flex-col items-center gap-2"><Loader2 className="animate-spin text-seekop-600" size={32} /><p className="text-sm text-seekop-700 font-medium">Subiendo archivos...</p></div>
             ) : (
               <div className="flex flex-col items-center gap-2">
                 <div className="w-14 h-14 rounded-full bg-seekop-100 flex items-center justify-center"><Upload className="text-seekop-600" size={24} /></div>
                 <p className="text-sm font-medium text-gray-700">Arrastra tus tickets aquí o <span className="text-seekop-600 hover:underline">haz clic para seleccionar</span></p>
-                <p className="text-xs text-gray-400">JPG, PNG, WebP o PDF — máx. 10 MB, hasta 10 a la vez</p>
+                <p className="text-xs text-gray-400">JPG, PNG, WebP, PDF o XML (CFDI) — máx. 10 MB, hasta 10 a la vez</p>
               </div>
             )}
           </div>
@@ -421,11 +421,13 @@ function TicketRow({ receipt, onView, onDelete, onReExtract }: { receipt: Expens
           <p className="text-sm font-medium text-gray-800 truncate">{receipt.vendorName || receipt.fileName}</p>
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${st.color}`}>{st.icon} {st.label}</span>
           {isManual && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-200">Manual</span>}
+          {receipt.isCfdi && <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">CFDI</span>}
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
           {receipt.totalAmount != null && <span className="font-semibold text-gray-700">${receipt.totalAmount.toFixed(2)} {receipt.currency}</span>}
           {receipt.category && <span>{CATEGORY_LABELS[receipt.category] ?? receipt.category}</span>}
           {receipt.receiptDate && <span>{receipt.receiptDate}</span>}
+          {receipt.rfcEmisor && <span className="text-blue-600">RFC: {receipt.rfcEmisor}</span>}
           {!receipt.reportId ? <span className="text-amber-600 font-medium">Sin asignar</span> : <span className="text-seekop-600">Asignado</span>}
         </div>
       </div>
@@ -513,6 +515,9 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ExpenseReceipt; onC
               <h2 className="text-lg font-semibold text-gray-900">{receipt.vendorName || receipt.fileName}</h2>
               {isManual && (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">Manual</span>
+              )}
+              {receipt.isCfdi && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-700 border border-blue-200">CFDI</span>
               )}
             </div>
             <div className="flex items-center gap-3 mt-1">
@@ -644,6 +649,32 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ExpenseReceipt; onC
                     {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
                     Guardar cambios
                   </button>
+                </div>
+              )}
+
+              {receipt.isCfdi && (
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+                  <h4 className="text-xs font-semibold text-blue-800 uppercase tracking-wide">Datos Fiscales (CFDI)</h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {receipt.uuidFiscal && (
+                      <div className="col-span-2">
+                        <span className="text-blue-600 font-medium">UUID Fiscal:</span>{" "}
+                        <span className="text-gray-800 font-mono text-[11px]">{receipt.uuidFiscal}</span>
+                      </div>
+                    )}
+                    {receipt.rfcEmisor && (
+                      <div>
+                        <span className="text-blue-600 font-medium">RFC Emisor:</span>{" "}
+                        <span className="text-gray-800 font-mono">{receipt.rfcEmisor}</span>
+                      </div>
+                    )}
+                    {receipt.rfcReceptor && (
+                      <div>
+                        <span className="text-blue-600 font-medium">RFC Receptor:</span>{" "}
+                        <span className="text-gray-800 font-mono">{receipt.rfcReceptor}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

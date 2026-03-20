@@ -20,6 +20,8 @@ from app.models.vacation_balance import VacationBalance
 from app.models.vacation_request import VacationRequest, VacationRequestStatus
 from app.models.team import Team
 from app.models.team_policy import TeamPolicy
+from app.models.expense_receipt import ExpenseReceipt, ExtractionStatus
+from app.models.expense_report import ExpenseReport, ExpenseReportStatus
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +134,31 @@ TOOL_DEFINITIONS: list[ToolDef] = [
         description="Obtiene la política de vacaciones vigente de un equipo (capacidad diaria, anticipación mínima).",
         allowed_roles={"MANAGER", "ADMIN", "HR"},
         parameters=[{"name": "year", "type": "int", "description": "Año de referencia (opcional)"}],
+    ),
+    # ── Finance / Expense Tools ──────────────────────────────────
+    ToolDef(
+        name="list_expense_reports",
+        description="Lista reportes de gastos. Puede filtrar por estado (DRAFT, SUBMITTED, APPROVED, REJECTED, NEEDS_CHANGES).",
+        allowed_roles={"FINANCE", "ADMIN"},
+        parameters=[{"name": "status", "type": "str", "description": "Filtro opcional de estado"}],
+    ),
+    ToolDef(
+        name="list_recent_receipts",
+        description="Lista los comprobantes/tickets más recientes con vendor, monto, fecha y si es CFDI.",
+        allowed_roles={"FINANCE", "ADMIN"},
+        parameters=[{"name": "days", "type": "int", "description": "Últimos N días (default 30)"}],
+    ),
+    ToolDef(
+        name="list_cfdi_receipts",
+        description="Lista solo los comprobantes CFDI (facturas fiscales) con UUID, RFC, monto.",
+        allowed_roles={"FINANCE", "ADMIN"},
+        parameters=[{"name": "days", "type": "int", "description": "Últimos N días (default 30)"}],
+    ),
+    ToolDef(
+        name="get_expense_summary",
+        description="Resumen de gastos: total reportes, montos, comprobantes, CFDIs, reportes por estado.",
+        allowed_roles={"FINANCE", "ADMIN"},
+        parameters=[],
     ),
 ]
 
@@ -636,6 +663,136 @@ class AIToolExecutor:
             record_count=1,
         )
 
+    # ── list_expense_reports ──────────────────────────
+    def list_expense_reports(self, status_filter: str | None = None) -> ToolResult:
+        # Exclude DRAFT reports — Finance only sees submitted/approved/rejected/needs_changes
+        filters: list = [ExpenseReport.status != ExpenseReportStatus.DRAFT]
+        if status_filter:
+            try:
+                st = ExpenseReportStatus(status_filter.upper())
+                filters.append(ExpenseReport.status == st)
+            except ValueError:
+                pass
+
+        owner_alias = aliased(User)
+        stmt = (
+            select(ExpenseReport, owner_alias.full_name)
+            .join(owner_alias, owner_alias.id == ExpenseReport.owner_id)
+            .where(*filters)
+            .order_by(ExpenseReport.created_at.desc())
+            .limit(20)
+        )
+        rows = self.db.execute(stmt).all()
+        if not rows:
+            label = f" con estado {status_filter.upper()}" if status_filter else ""
+            return ToolResult(tool_name="list_expense_reports", data=f"No hay reportes de gastos{label}.")
+
+        lines = []
+        for report, owner_name in rows:
+            amt = f"${report.total_amount:,.2f} {report.currency}" if report.total_amount else "sin monto"
+            lines.append(f"• {owner_name}: {report.title or 'Sin título'} — {report.status.value} — {amt}")
+        return ToolResult(
+            tool_name="list_expense_reports",
+            data=f"Reportes de gastos ({len(rows)}):\n" + "\n".join(lines),
+            record_count=len(rows),
+        )
+
+    # ── list_recent_receipts ───────────────────────────
+    def list_recent_receipts(self, days: int = 30) -> ToolResult:
+        since = self._today() - timedelta(days=days)
+        stmt = (
+            select(ExpenseReceipt, User.full_name)
+            .join(User, User.id == ExpenseReceipt.owner_id)
+            .where(ExpenseReceipt.created_at >= datetime(since.year, since.month, since.day, tzinfo=timezone.utc))
+            .order_by(ExpenseReceipt.created_at.desc())
+            .limit(25)
+        )
+        rows = self.db.execute(stmt).all()
+        if not rows:
+            return ToolResult(tool_name="list_recent_receipts", data=f"No hay comprobantes en los últimos {days} días.")
+
+        lines = []
+        for r, owner_name in rows:
+            amt = f"${r.total_amount:,.2f}" if r.total_amount else "?"
+            cfdi_tag = " [CFDI]" if r.is_cfdi else ""
+            vendor = r.vendor_name or r.file_name
+            dt = r.receipt_date.isoformat() if r.receipt_date else "sin fecha"
+            lines.append(f"• {owner_name}: {vendor} — {amt} — {dt}{cfdi_tag}")
+        return ToolResult(
+            tool_name="list_recent_receipts",
+            data=f"Comprobantes recientes ({len(rows)}, últimos {days} días):\n" + "\n".join(lines),
+            record_count=len(rows),
+        )
+
+    # ── list_cfdi_receipts ─────────────────────────────
+    def list_cfdi_receipts(self, days: int = 30) -> ToolResult:
+        since = self._today() - timedelta(days=days)
+        stmt = (
+            select(ExpenseReceipt, User.full_name)
+            .join(User, User.id == ExpenseReceipt.owner_id)
+            .where(
+                ExpenseReceipt.is_cfdi.is_(True),
+                ExpenseReceipt.created_at >= datetime(since.year, since.month, since.day, tzinfo=timezone.utc),
+            )
+            .order_by(ExpenseReceipt.created_at.desc())
+            .limit(25)
+        )
+        rows = self.db.execute(stmt).all()
+        if not rows:
+            return ToolResult(tool_name="list_cfdi_receipts", data=f"No hay CFDIs en los últimos {days} días.")
+
+        lines = []
+        for r, owner_name in rows:
+            amt = f"${r.total_amount:,.2f}" if r.total_amount else "?"
+            uuid_short = r.uuid_fiscal[:8] + "…" if r.uuid_fiscal else "sin UUID"
+            rfc = r.rfc_emisor or "?"
+            lines.append(f"• {owner_name}: {r.vendor_name or '?'} — {amt} — RFC: {rfc} — UUID: {uuid_short}")
+        return ToolResult(
+            tool_name="list_cfdi_receipts",
+            data=f"CFDIs recientes ({len(rows)}, últimos {days} días):\n" + "\n".join(lines),
+            record_count=len(rows),
+        )
+
+    # ── get_expense_summary ────────────────────────────
+    def get_expense_summary(self) -> ToolResult:
+        # Exclude DRAFT reports — Finance only sees submitted+ reports
+        non_draft = ExpenseReport.status != ExpenseReportStatus.DRAFT
+        total_reports = int(self.db.execute(select(func.count(ExpenseReport.id)).where(non_draft)).scalar_one() or 0)
+        total_receipts = int(self.db.execute(select(func.count(ExpenseReceipt.id))).scalar_one() or 0)
+        total_cfdi = int(self.db.execute(
+            select(func.count(ExpenseReceipt.id)).where(ExpenseReceipt.is_cfdi.is_(True))
+        ).scalar_one() or 0)
+
+        # Reports by status (skip DRAFT)
+        status_counts = {}
+        for st in ExpenseReportStatus:
+            if st == ExpenseReportStatus.DRAFT:
+                continue
+            cnt = int(self.db.execute(
+                select(func.count(ExpenseReport.id)).where(ExpenseReport.status == st)
+            ).scalar_one() or 0)
+            if cnt > 0:
+                status_counts[st.value] = cnt
+
+        # Total amounts from approved reports
+        total_approved_amt = self.db.execute(
+            select(func.sum(ExpenseReport.total_amount)).where(ExpenseReport.status == ExpenseReportStatus.APPROVED)
+        ).scalar_one()
+        approved_str = f"${float(total_approved_amt):,.2f}" if total_approved_amt else "$0"
+
+        status_lines = ", ".join(f"{k}: {v}" for k, v in status_counts.items())
+
+        return ToolResult(
+            tool_name="get_expense_summary",
+            data=(
+                f"Resumen de gastos:\n"
+                f"• {total_reports} reportes en total ({status_lines})\n"
+                f"• {total_receipts} comprobantes ({total_cfdi} son CFDI)\n"
+                f"• Monto total aprobado: {approved_str}"
+            ),
+            record_count=1,
+        )
+
     # ── Dispatcher ─────────────────────────────────────
     def execute(self, tool_name: str, role: str, user_id: str, team_id: str | None, **kwargs: Any) -> ToolResult:
         # Permission check
@@ -676,6 +833,14 @@ class AIToolExecutor:
                 return self.get_global_summary()
             elif tool_name == "get_policies_by_area":
                 return self.get_policies_by_area(team_id=team_id)
+            elif tool_name == "list_expense_reports":
+                return self.list_expense_reports(kwargs.get("status"))
+            elif tool_name == "list_recent_receipts":
+                return self.list_recent_receipts(kwargs.get("days", 30))
+            elif tool_name == "list_cfdi_receipts":
+                return self.list_cfdi_receipts(kwargs.get("days", 30))
+            elif tool_name == "get_expense_summary":
+                return self.get_expense_summary()
             else:
                 return ToolResult(tool_name=tool_name, data="Herramienta no implementada.")
         except Exception as exc:

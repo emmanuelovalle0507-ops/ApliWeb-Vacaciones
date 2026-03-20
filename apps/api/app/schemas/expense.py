@@ -27,6 +27,11 @@ class ReceiptOut(BaseModel):
     paymentMethod: str | None = None
     category: str | None = None
     description: str | None = None
+    isCfdi: bool = False
+    uuidFiscal: str | None = None
+    rfcEmisor: str | None = None
+    rfcReceptor: str | None = None
+    cfdiXmlUrl: str | None = None
     createdAt: datetime
     updatedAt: datetime
 

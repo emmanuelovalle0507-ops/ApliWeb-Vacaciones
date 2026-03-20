@@ -123,7 +123,7 @@ class LLMService:
                 {"role": "user", "content": user_content},
             ],
             "temperature": temperature,
-            "max_tokens": 1000,
+            "max_tokens": 2000,
         }
         body = json.dumps(payload).encode("utf-8")
 
@@ -151,7 +151,8 @@ class LLMService:
                     continue
                 return LLMResult(text=str(content).strip())
             except error.HTTPError as exc:
-                logger.warning("Vision HTTP error %s (attempt %d/%d)", exc.code, attempt, retries)
+                err_body = exc.read().decode("utf-8", errors="replace")[:500] if exc.fp else ""
+                logger.warning("Vision HTTP error %s (attempt %d/%d): %s", exc.code, attempt, retries, err_body)
                 last_error = exc
                 if exc.code == 429 or exc.code >= 500:
                     time.sleep(RETRY_DELAY * attempt)
@@ -181,9 +182,13 @@ class LLMService:
             '  "category": "GASOLINE|TOLLS|FOOD|HOTEL|TRANSPORT|PARKING|SUPPLIES|OTHER",\n'
             '  "description": "descripción corta del gasto",\n'
             '  "confidence": 0.85,\n'
-            '  "raw_text": "texto completo detectado en la imagen"\n'
+            '  "raw_text": "texto completo detectado en la imagen",\n'
+            '  "uuid_fiscal": "UUID del CFDI si es factura (formato XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)",\n'
+            '  "rfc_emisor": "RFC del emisor/proveedor si aparece",\n'
+            '  "rfc_receptor": "RFC del receptor/comprador si aparece"\n'
             "}\n"
             "Si un campo no es detectado, usa null. Siempre incluye confidence (0.0 a 1.0). "
+            "Si la imagen es una factura CFDI mexicana, busca el UUID fiscal, RFC del emisor y RFC del receptor. "
             "Responde SOLO con el JSON, sin markdown ni texto extra."
         )
         result = self._chat_vision(system, image_base64, media_type, temperature=0.0)

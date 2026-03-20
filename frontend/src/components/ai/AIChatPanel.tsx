@@ -55,12 +55,12 @@ const ROLE_CONFIG: Record<UserRole, {
     color: "seekop",
   },
   FINANCE: {
-    placeholder: "Consulta reportes de gastos, aprobaciones y viáticos...",
+    placeholder: "Consulta reportes de gastos, comprobantes, facturas CFDI...",
     chips: [
-      "Reportes pendientes",
       "Resumen de gastos",
-      "Gastos por área",
-      "Reportes aprobados",
+      "Comprobantes recientes",
+      "Facturas CFDI del mes",
+      "Reportes pendientes",
     ],
     color: "seekop",
   },
@@ -329,6 +329,7 @@ export default function AIChatPanel({ title = "Asistente IA" }: AIChatPanelProps
               {role === 'MANAGER' && 'Puedo ayudarte con pendientes, disponibilidad y estado operativo de tu equipo.'}
               {role === 'HR' && 'Puedo ayudarte con consultas globales de empleados, balances, disponibilidad y solicitudes.'}
               {role === 'EMPLOYEE' && 'Puedo ayudarte con tu saldo, tus solicitudes y reglas generales de vacaciones.'}
+              {role === 'FINANCE' && 'Puedo ayudarte con reportes de gastos, comprobantes, facturas CFDI, montos y estados.'}
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               {config.chips.map((chip) => (

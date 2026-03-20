@@ -823,6 +823,11 @@ export type ExpenseReceipt = {
   paymentMethod: string | null;
   category: string | null;
   description: string | null;
+  isCfdi: boolean;
+  uuidFiscal: string | null;
+  rfcEmisor: string | null;
+  rfcReceptor: string | null;
+  cfdiXmlUrl: string | null;
   createdAt: string;
   updatedAt: string;
 };

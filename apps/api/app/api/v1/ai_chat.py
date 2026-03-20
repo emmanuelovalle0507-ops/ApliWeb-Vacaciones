@@ -18,7 +18,7 @@ router = APIRouter(prefix="/ai/chat", tags=["ai-chat"])
 def ask_chat(
     payload: AIChatRequest,
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("EMPLOYEE", "MANAGER", "ADMIN", "HR")),
+    current_user: UserSummary = Depends(require_roles("EMPLOYEE", "MANAGER", "ADMIN", "HR", "FINANCE")),
 ) -> AIChatResponse:
     service = AIChatService(db)
     try:
@@ -46,7 +46,7 @@ def ask_chat(
 def chat_history(
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("EMPLOYEE", "MANAGER", "ADMIN", "HR")),
+    current_user: UserSummary = Depends(require_roles("EMPLOYEE", "MANAGER", "ADMIN", "HR", "FINANCE")),
 ) -> AIChatHistoryResponse:
     service = AIChatService(db)
     try:

@@ -69,6 +69,8 @@ def _ext_from_content_type(ct: str) -> str:
         "image/png": ".png",
         "image/webp": ".webp",
         "application/pdf": ".pdf",
+        "text/xml": ".xml",
+        "application/xml": ".xml",
     }
     return mapping.get(ct, "")
 
@@ -81,6 +83,10 @@ def _magic_matches(data: bytes, content_type: str) -> bool:
         "image/webp": [b"RIFF"],
         "application/pdf": [b"%PDF"],
     }
+    # XML files may have BOM or whitespace before the declaration — handle separately
+    if content_type in ("text/xml", "application/xml"):
+        stripped = data.lstrip(b"\xef\xbb\xbf \t\r\n")[:50]
+        return stripped.startswith(b"<?xml") or stripped.startswith(b"<cfdi") or stripped.startswith(b"<Comprobante")
     signatures = checks.get(content_type)
     if not signatures:
         return True  # Unknown type, skip check

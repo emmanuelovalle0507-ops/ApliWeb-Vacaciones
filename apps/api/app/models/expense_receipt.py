@@ -67,6 +67,13 @@ class ExpenseReceipt(Base):
     )
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # CFDI fields
+    is_cfdi: Mapped[bool] = mapped_column(default=False, nullable=False, server_default="false")
+    uuid_fiscal: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
+    rfc_emisor: Mapped[str | None] = mapped_column(String(13), nullable=True)
+    rfc_receptor: Mapped[str | None] = mapped_column(String(13), nullable=True)
+    cfdi_xml_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )

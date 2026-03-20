@@ -95,6 +95,16 @@ class ReceiptExtractionService:
                 receipt.category = ExpenseCategory(raw_category)
             receipt.description = self._safe_str(result.get("description"), 500)
 
+            # If AI detected CFDI fields, populate them
+            ai_uuid = self._safe_str(result.get("uuid_fiscal"), 36)
+            ai_rfc_emisor = self._safe_str(result.get("rfc_emisor"), 13)
+            ai_rfc_receptor = self._safe_str(result.get("rfc_receptor"), 13)
+            if ai_uuid and len(ai_uuid) >= 32:
+                receipt.is_cfdi = True
+                receipt.uuid_fiscal = ai_uuid.upper()
+                receipt.rfc_emisor = ai_rfc_emisor.upper() if ai_rfc_emisor else None
+                receipt.rfc_receptor = ai_rfc_receptor.upper() if ai_rfc_receptor else None
+
             receipt.extraction_status = ExtractionStatus.DONE
             self.db.flush()
 
