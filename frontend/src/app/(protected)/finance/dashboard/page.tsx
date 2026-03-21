@@ -7,7 +7,7 @@ import {
   Receipt, CheckCircle, XCircle, AlertTriangle, Loader2,
   FileText, Download, Sparkles, Clock, Eye, X,
   DollarSign, Users, Search, TrendingUp, Building2, Filter,
-  PenLine, BarChart3, ThumbsUp, ThumbsDown, MessageSquare, RotateCcw,
+  PenLine, BarChart3, MessageSquare, RotateCcw, Upload, Banknote, CreditCard,
 } from "lucide-react";
 import api from "@/api/client";
 import type { ExpenseReceipt, ExpenseReport } from "@/api/real/client";
@@ -277,6 +277,8 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
   const [showActions, setShowActions] = useState(false);
   const [rejectComments, setRejectComments] = useState<Record<string, string>>({});
   const [decidingId, setDecidingId] = useState<string | null>(null);
+  const [paymentFile, setPaymentFile] = useState<File | null>(null);
+  const [showPaymentForm, setShowPaymentForm] = useState(false);
 
   const { data: report, isLoading } = useQuery({
     queryKey: ["finance-report", reportId],
@@ -309,7 +311,13 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
     onError: (err: unknown) => { setDecidingId(null); toast("error", err instanceof Error ? err.message : "Error"); },
   });
 
-  const acting = needsChangesMut.isPending || finalizeMut.isPending;
+  const markPaidMut = useMutation({
+    mutationFn: () => api.finance.markReportPaid(reportId, paymentFile || undefined),
+    onSuccess: () => { toast("success", "Reporte marcado como pagado."); setShowPaymentForm(false); setPaymentFile(null); invalidate(); },
+    onError: (err: unknown) => { toast("error", err instanceof Error ? err.message : "Error"); },
+  });
+
+  const acting = needsChangesMut.isPending || finalizeMut.isPending || markPaidMut.isPending;
 
   if (isLoading || !report) {
     return (
@@ -332,8 +340,8 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
   const approvedTotal = approvedReceipts.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
 
   const DECISION_BADGE: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-    APPROVED: { label: "Aprobado", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: <ThumbsUp size={10} /> },
-    REJECTED: { label: "Rechazado", color: "bg-red-100 text-red-700 border-red-200", icon: <ThumbsDown size={10} /> },
+    APPROVED: { label: "Aprobado", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: <CheckCircle size={10} /> },
+    REJECTED: { label: "Rechazado", color: "bg-red-100 text-red-700 border-red-200", icon: <XCircle size={10} /> },
     PENDING: { label: "Sin revisar", color: "bg-gray-100 text-gray-500 border-gray-200", icon: <Clock size={10} /> },
   };
 
@@ -481,10 +489,9 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setDecidingId(r.id); decideReceiptMut.mutate({ receiptId: r.id, decision: "APPROVED" }); }}
                                   disabled={decideReceiptMut.isPending}
-                                  className={`p-1.5 rounded-lg transition-colors ${r.decision === "APPROVED" ? "bg-emerald-500 text-white" : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"}`}
-                                  title="Aprobar ticket"
+                                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-colors ${r.decision === "APPROVED" ? "bg-emerald-600 text-white" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"}`}
                                 >
-                                  <ThumbsUp size={13} />
+                                  <CheckCircle size={11} /> Aprobar
                                 </button>
                                 <button
                                   onClick={(e) => {
@@ -497,10 +504,9 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
                                     }
                                   }}
                                   disabled={decideReceiptMut.isPending}
-                                  className={`p-1.5 rounded-lg transition-colors ${r.decision === "REJECTED" ? "bg-red-500 text-white" : "bg-red-50 text-red-500 hover:bg-red-100"}`}
-                                  title="Rechazar ticket"
+                                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium transition-colors ${r.decision === "REJECTED" ? "bg-red-600 text-white" : "bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"}`}
                                 >
-                                  <ThumbsDown size={13} />
+                                  <XCircle size={11} /> Rechazar
                                 </button>
                               </div>
                             )}
@@ -566,6 +572,79 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
       )}
 
       {/* Finalize actions (only for SUBMITTED reports) */}
+      {/* Payment section for APPROVED reports */}
+      {report.status === "APPROVED" && (
+        <div className="px-5 py-4 border-b border-gray-100">
+          {report.paymentStatus === "PAID" ? (
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-700 rounded-lg text-sm font-semibold border border-emerald-200">
+                <Banknote size={15} /> Pagado
+              </span>
+              {report.paidAt && (
+                <span className="text-xs text-gray-500">
+                  {new Date(report.paidAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
+              {report.paymentProofUrl && (
+                <a
+                  href={getAuthFileUrl(report.paymentProofUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 px-2.5 py-1 bg-seekop-50 text-seekop-700 rounded-lg text-xs font-medium hover:bg-seekop-100 border border-seekop-200 transition-colors"
+                >
+                  <Eye size={12} /> Ver comprobante
+                </a>
+              )}
+            </div>
+          ) : !showPaymentForm ? (
+            <button
+              onClick={() => setShowPaymentForm(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors shadow-sm"
+            >
+              <CreditCard size={15} /> Marcar como pagado
+            </button>
+          ) : (
+            <div className="space-y-3 bg-emerald-50/50 -mx-5 -mb-4 px-5 py-4 rounded-b-xl border-t border-emerald-100">
+              <p className="text-sm font-semibold text-emerald-800">Confirmar pago del reporte</p>
+              <p className="text-xs text-emerald-600">Opcionalmente puedes adjuntar un comprobante de pago (imagen o PDF).</p>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 px-3 py-2 bg-white border border-emerald-200 rounded-lg text-xs font-medium text-emerald-700 cursor-pointer hover:bg-emerald-50 transition-colors">
+                  <Upload size={13} />
+                  {paymentFile ? paymentFile.name : "Adjuntar comprobante"}
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={(e) => setPaymentFile(e.target.files?.[0] || null)}
+                  />
+                </label>
+                {paymentFile && (
+                  <button onClick={() => setPaymentFile(null)} className="text-xs text-gray-400 hover:text-red-500">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => markPaidMut.mutate()}
+                  disabled={acting}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  {markPaidMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <Banknote size={14} />}
+                  Confirmar pago
+                </button>
+                <button
+                  onClick={() => { setShowPaymentForm(false); setPaymentFile(null); }}
+                  className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {isSubmitted && (
         <div className="px-5 py-4">
           {!showActions ? (

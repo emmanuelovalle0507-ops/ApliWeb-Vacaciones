@@ -8,6 +8,7 @@ import {
   RefreshCw, Send, Plus, Sparkles, X, Trash2,
   Save, Eye, ChevronRight, DollarSign, PenLine,
   RotateCcw, CheckCircle, AlertTriangle, ImageOff, Search,
+  Banknote, Download, Info,
 } from "lucide-react";
 import api from "@/api/client";
 import type { ExpenseReceipt, ExpenseReport } from "@/api/real/client";
@@ -762,6 +763,14 @@ function ReportsTab({ onViewReceipt }: { onViewReceipt: (r: ExpenseReceipt) => v
         <CreateReportForm unassignedReceipts={unassignedReceipts} onCancel={() => setShowCreate(false)} onCreated={invalidateAll} />
       )}
 
+      {/* Friday deposits notice */}
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+        <Info size={15} className="text-blue-500 shrink-0" />
+        <p className="text-xs text-blue-700">
+          <strong>Aviso:</strong> Los depósitos de reembolso se realizan <strong>cada viernes</strong> de cada semana.
+        </p>
+      </div>
+
       {/* Reports list */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
         <div className="px-5 py-3 border-b border-gray-100">
@@ -836,12 +845,40 @@ function ReportRow({ report, onSubmit, submitting, onViewReceipt }: {
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-medium text-gray-800">{report.title}</p>
             <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${st.color}`}>{st.label}</span>
+            {report.status === "APPROVED" && report.paymentStatus === "PAID" && (
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium border bg-emerald-100 text-emerald-700 border-emerald-200 flex items-center gap-1">
+                <Banknote size={10} /> Pagado
+              </span>
+            )}
+            {report.status === "APPROVED" && report.paymentStatus !== "PAID" && (
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-medium border bg-amber-50 text-amber-600 border-amber-200 flex items-center gap-1">
+                <Clock size={10} /> Pago pendiente
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
             <span>{report.periodStart} — {report.periodEnd}</span>
             {report.totalAmount != null && <span className="font-semibold text-gray-700">${report.totalAmount.toFixed(2)} {report.currency}</span>}
             <span>{report.receiptCount ?? receipts.length} tickets</span>
           </div>
+          {report.paymentStatus === "PAID" && report.paidAt && (
+            <div className="flex items-center gap-2 mt-1">
+              <p className="text-[11px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded inline-flex items-center gap-1 border border-emerald-100">
+                <Banknote size={10} /> Depositado el {new Date(report.paidAt).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}
+              </p>
+              {report.paymentProofUrl && (
+                <a
+                  href={getAuthFileUrl(report.paymentProofUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-[11px] text-seekop-600 bg-seekop-50 px-2 py-0.5 rounded inline-flex items-center gap-1 border border-seekop-100 hover:bg-seekop-100 transition-colors"
+                >
+                  <Download size={10} /> Ver comprobante
+                </a>
+              )}
+            </div>
+          )}
           {!isNeedsChanges && report.decisionComment && (
             <p className="text-xs text-amber-600 mt-1 bg-amber-50 px-2 py-1 rounded inline-block">
               Finanzas: &ldquo;{report.decisionComment}&rdquo;

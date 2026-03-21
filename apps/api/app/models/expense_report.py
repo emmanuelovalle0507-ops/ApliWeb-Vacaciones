@@ -17,6 +17,11 @@ class ExpenseReportStatus(str, Enum):
     NEEDS_CHANGES = "NEEDS_CHANGES"
 
 
+class PaymentStatus(str, Enum):
+    PENDING = "PENDING"
+    PAID = "PAID"
+
+
 class ExpenseReport(Base):
     __tablename__ = "expense_reports"
 
@@ -43,6 +48,18 @@ class ExpenseReport(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_status: Mapped[PaymentStatus] = mapped_column(
+        SQLEnum(PaymentStatus, name="payment_status"),
+        nullable=False,
+        default=PaymentStatus.PENDING,
+        server_default="PENDING",
+    )
+    payment_proof_file: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    payment_proof_content_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )

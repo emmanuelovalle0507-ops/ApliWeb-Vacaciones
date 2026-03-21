@@ -847,6 +847,10 @@ export type ExpenseReport = {
   decisionComment: string | null;
   decidedBy: string | null;
   decidedAt: string | null;
+  paymentStatus: "PENDING" | "PAID";
+  paymentProofUrl: string | null;
+  paidAt: string | null;
+  paidBy: string | null;
   createdAt: string;
   updatedAt: string;
   receipts: ExpenseReceipt[];
@@ -1028,4 +1032,24 @@ export async function needsChangesReport(id: string, comment?: string): Promise<
 
 export function exportReportUrl(id: string): string {
   return `${BASE_URL}/finance/reports/${id}/export`;
+}
+
+export async function markReportPaid(id: string, file?: File): Promise<ExpenseReport> {
+  const token = getToken();
+  const formData = new FormData();
+  if (file) formData.append("file", file);
+  const res = await fetch(`${BASE_URL}/finance/reports/${id}/mark-paid`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export function paymentProofUrl(id: string): string {
+  return `${BASE_URL}/finance/reports/${id}/payment-proof`;
 }

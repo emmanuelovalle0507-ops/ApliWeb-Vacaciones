@@ -94,6 +94,10 @@ class ReportOut(BaseModel):
     decisionComment: str | None = None
     decidedBy: str | None = None
     decidedAt: datetime | None = None
+    paymentStatus: str = "PENDING"
+    paymentProofUrl: str | None = None
+    paidAt: datetime | None = None
+    paidBy: str | None = None
     createdAt: datetime
     updatedAt: datetime
     receipts: list[ReceiptOut] = []

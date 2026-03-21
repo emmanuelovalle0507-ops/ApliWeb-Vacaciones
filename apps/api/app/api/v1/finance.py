@@ -7,7 +7,7 @@ import io
 from collections import defaultdict
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
@@ -16,7 +16,8 @@ from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.expense_action import ExpenseAction
 from app.models.expense_receipt import ExpenseReceipt, ReceiptDecision
-from app.models.expense_report import ExpenseReport, ExpenseReportStatus
+from app.models.expense_report import ExpenseReport, ExpenseReportStatus, PaymentStatus
+from app.services.storage_service import StorageService
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.expense_report_repo import ExpenseReportRepository
 from app.repositories.user_repo import UserRepository
@@ -32,6 +33,7 @@ from app.schemas.pagination import PaginationMeta, PaginationParams
 from app.api.v1.expenses import _receipt_to_out, _report_to_out
 
 router = APIRouter(prefix="/finance", tags=["finance"])
+_storage = StorageService()
 
 
 # ── Report List (all — for finance/admin) ──────────────
@@ -394,4 +396,84 @@ def export_report(
         io.StringIO(buf.getvalue()),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=reporte_gastos_{report_id[:8]}.csv"},
+    )
+
+
+# ── Mark Report as Paid ───────────────────────────────
+@router.post("/reports/{report_id}/mark-paid", response_model=ReportOut)
+async def mark_report_paid(
+    report_id: str,
+    file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("FINANCE", "ADMIN")),
+) -> ReportOut:
+    """Mark an APPROVED report as PAID, optionally uploading payment proof."""
+    repo = ExpenseReportRepository(db)
+    report = repo.get_by_id(report_id)
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
+    if report.status != ExpenseReportStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se pueden marcar como pagados reportes aprobados.",
+        )
+
+    # Handle optional payment proof upload
+    if file:
+        data = await file.read()
+        content_type = file.content_type or "application/octet-stream"
+        allowed = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
+        if content_type not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Tipo de archivo no permitido. Permitidos: {', '.join(allowed)}",
+            )
+        if len(data) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Archivo demasiado grande (máx 10 MB).")
+
+        key = _storage.save(data, current_user.id, file.filename or "proof", content_type)
+        report.payment_proof_file = key
+        report.payment_proof_content_type = content_type
+
+    report.payment_status = PaymentStatus.PAID
+    report.paid_at = datetime.now(timezone.utc)
+    report.paid_by = current_user.id
+
+    AuditRepository(db).log(
+        actor_user_id=current_user.id,
+        action="REPORT_MARKED_PAID",
+        entity_type="expense_report",
+        entity_id=report_id,
+        metadata={"has_proof": bool(report.payment_proof_file)},
+    )
+
+    db.commit()
+    db.refresh(report)
+    return _report_to_out(report, db, include_receipts=True)
+
+
+# ── Serve Payment Proof File ──────────────────────────
+@router.get("/reports/{report_id}/payment-proof")
+def serve_payment_proof(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("FINANCE", "ADMIN", "MANAGER")),
+) -> StreamingResponse:
+    """Serve the payment proof file for a report."""
+    repo = ExpenseReportRepository(db)
+    report = repo.get_by_id(report_id)
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
+    if not report.payment_proof_file:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No hay comprobante de pago.")
+
+    path = _storage.get_full_path(report.payment_proof_file)
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado en disco.")
+
+    media_type = report.payment_proof_content_type or "application/octet-stream"
+    return StreamingResponse(
+        open(path, "rb"),
+        media_type=media_type,
+        headers={"Content-Disposition": f"inline; filename=comprobante_pago_{report_id[:8]}"},
     )

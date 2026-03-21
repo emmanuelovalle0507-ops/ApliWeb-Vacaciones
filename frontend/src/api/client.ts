@@ -98,6 +98,8 @@ export const api = {
     decideReceipt: impl.decideReceipt,
     finalizeReview: impl.finalizeReview,
     resetReceiptDecisions: impl.resetReceiptDecisions,
+    markReportPaid: impl.markReportPaid,
+    paymentProofUrl: impl.paymentProofUrl,
   },
 };
 
