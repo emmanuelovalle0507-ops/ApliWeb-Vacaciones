@@ -823,6 +823,10 @@ export type ExpenseReceipt = {
   paymentMethod: string | null;
   category: string | null;
   description: string | null;
+  decision: "PENDING" | "APPROVED" | "REJECTED";
+  decisionComment: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -900,6 +904,30 @@ export async function updateReceipt(id: string, data: Partial<{
   return request<ExpenseReceipt>(`/expenses/receipts/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),
+  });
+}
+
+export async function decideReceipt(
+  reportId: string, receiptId: string, decision: "APPROVED" | "REJECTED", comment?: string,
+): Promise<ExpenseReceipt> {
+  return request<ExpenseReceipt>(`/finance/reports/${reportId}/receipts/${receiptId}/decision`, {
+    method: "POST",
+    body: JSON.stringify({ decision, comment: comment || null }),
+  });
+}
+
+export async function finalizeReview(
+  reportId: string, comment?: string,
+): Promise<ExpenseReport> {
+  return request<ExpenseReport>(`/finance/reports/${reportId}/finalize`, {
+    method: "POST",
+    body: JSON.stringify({ comment: comment || null }),
+  });
+}
+
+export async function resetReceiptDecisions(reportId: string): Promise<ExpenseReport> {
+  return request<ExpenseReport>(`/finance/reports/${reportId}/reset-decisions`, {
+    method: "POST",
   });
 }
 

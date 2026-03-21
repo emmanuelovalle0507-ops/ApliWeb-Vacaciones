@@ -17,6 +17,12 @@ class ExtractionStatus(str, Enum):
     FAILED = "FAILED"
 
 
+class ReceiptDecision(str, Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class ExpenseCategory(str, Enum):
     GASOLINE = "GASOLINE"
     TOLLS = "TOLLS"
@@ -66,6 +72,19 @@ class ExpenseReceipt(Base):
         SQLEnum(ExpenseCategory, name="expense_category"), nullable=True
     )
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # Finance per-ticket decision
+    decision: Mapped[ReceiptDecision] = mapped_column(
+        SQLEnum(ReceiptDecision, name="receipt_decision"),
+        nullable=False,
+        default=ReceiptDecision.PENDING,
+        server_default="PENDING",
+    )
+    decision_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)

@@ -7,7 +7,7 @@ import {
   Receipt, CheckCircle, XCircle, AlertTriangle, Loader2,
   FileText, Download, Sparkles, Clock, Eye, X,
   DollarSign, Users, Search, TrendingUp, Building2, Filter,
-  PenLine, BarChart3,
+  PenLine, BarChart3, ThumbsUp, ThumbsDown, MessageSquare, RotateCcw,
 } from "lucide-react";
 import api from "@/api/client";
 import type { ExpenseReceipt, ExpenseReport } from "@/api/real/client";
@@ -275,20 +275,13 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
   const { toast } = useToast();
   const [comment, setComment] = useState("");
   const [showActions, setShowActions] = useState(false);
+  const [rejectComments, setRejectComments] = useState<Record<string, string>>({});
+  const [decidingId, setDecidingId] = useState<string | null>(null);
 
   const { data: report, isLoading } = useQuery({
     queryKey: ["finance-report", reportId],
     queryFn: () => api.finance.getReport(reportId),
   });
-
-  const mutOpts = (msg: string) => ({
-    onSuccess: () => { toast("success", msg); invalidate(); },
-    onError: (err: unknown) => { toast("error", err instanceof Error ? err.message : "Error"); },
-  });
-
-  const approveMut = useMutation({ mutationFn: () => api.finance.approve(reportId, comment), ...mutOpts("Reporte aprobado.") });
-  const rejectMut = useMutation({ mutationFn: () => api.finance.reject(reportId, comment), ...mutOpts("Reporte rechazado.") });
-  const needsChangesMut = useMutation({ mutationFn: () => api.finance.needsChanges(reportId, comment), ...mutOpts("Correcciones solicitadas.") });
 
   const invalidate = () => {
     setComment("");
@@ -298,7 +291,25 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
     queryClient.invalidateQueries({ queryKey: ["finance-analytics"] });
   };
 
-  const acting = approveMut.isPending || rejectMut.isPending || needsChangesMut.isPending;
+  const mutOpts = (msg: string) => ({
+    onSuccess: () => { toast("success", msg); invalidate(); },
+    onError: (err: unknown) => { toast("error", err instanceof Error ? err.message : "Error"); },
+  });
+
+  const needsChangesMut = useMutation({ mutationFn: () => api.finance.needsChanges(reportId, comment), ...mutOpts("Correcciones solicitadas.") });
+  const finalizeMut = useMutation({ mutationFn: () => api.finance.finalizeReview(reportId, comment), ...mutOpts("Revisión finalizada.") });
+
+  const decideReceiptMut = useMutation({
+    mutationFn: ({ receiptId, decision, rcComment }: { receiptId: string; decision: "APPROVED" | "REJECTED"; rcComment?: string }) =>
+      api.finance.decideReceipt(reportId, receiptId, decision, rcComment),
+    onSuccess: () => {
+      setDecidingId(null);
+      queryClient.invalidateQueries({ queryKey: ["finance-report", reportId] });
+    },
+    onError: (err: unknown) => { setDecidingId(null); toast("error", err instanceof Error ? err.message : "Error"); },
+  });
+
+  const acting = needsChangesMut.isPending || finalizeMut.isPending;
 
   if (isLoading || !report) {
     return (
@@ -312,6 +323,19 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
   const receipts = report.receipts ?? [];
   const totalSum = receipts.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
   const taxSum = receipts.reduce((s, r) => s + (r.taxAmount ?? 0), 0);
+
+  const isSubmitted = report.status === "SUBMITTED";
+  const approvedReceipts = receipts.filter((r) => r.decision === "APPROVED");
+  const rejectedReceipts = receipts.filter((r) => r.decision === "REJECTED");
+  const pendingReceipts = receipts.filter((r) => !r.decision || r.decision === "PENDING");
+  const allDecided = pendingReceipts.length === 0 && receipts.length > 0;
+  const approvedTotal = approvedReceipts.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
+
+  const DECISION_BADGE: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
+    APPROVED: { label: "Aprobado", color: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: <ThumbsUp size={10} /> },
+    REJECTED: { label: "Rechazado", color: "bg-red-100 text-red-700 border-red-200", icon: <ThumbsDown size={10} /> },
+    PENDING: { label: "Sin revisar", color: "bg-gray-100 text-gray-500 border-gray-200", icon: <Clock size={10} /> },
+  };
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -358,9 +382,34 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
             <span className="font-bold text-seekop-700 text-sm">${totalSum.toFixed(2)} {report.currency}</span>
           </div>
         </div>
+
+        {/* Review progress bar (for SUBMITTED reports) */}
+        {isSubmitted && receipts.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="text-gray-500">Progreso de revisión</span>
+              <span className="text-gray-600 font-medium">
+                {approvedReceipts.length + rejectedReceipts.length} / {receipts.length} revisados
+              </span>
+            </div>
+            <div className="flex gap-0.5 h-2 rounded-full overflow-hidden bg-gray-100">
+              {approvedReceipts.length > 0 && (
+                <div className="bg-emerald-500 transition-all" style={{ width: `${(approvedReceipts.length / receipts.length) * 100}%` }} />
+              )}
+              {rejectedReceipts.length > 0 && (
+                <div className="bg-red-400 transition-all" style={{ width: `${(rejectedReceipts.length / receipts.length) * 100}%` }} />
+              )}
+            </div>
+            <div className="flex gap-4 mt-1.5 text-[10px]">
+              <span className="text-emerald-600 font-medium">✓ {approvedReceipts.length} aprobados (${approvedTotal.toFixed(2)})</span>
+              <span className="text-red-500 font-medium">✗ {rejectedReceipts.length} rechazados</span>
+              <span className="text-gray-400">{pendingReceipts.length} pendientes</span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Tickets table */}
+      {/* Tickets table with per-ticket actions */}
       <div className="border-b border-gray-100">
         {receipts.length === 0 ? (
           <p className="text-sm text-gray-400 py-8 text-center">Sin tickets adjuntos.</p>
@@ -373,50 +422,132 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
                   <th className="py-2.5 pr-3 font-medium">Proveedor</th>
                   <th className="py-2.5 pr-3 font-medium">Fecha</th>
                   <th className="py-2.5 pr-3 font-medium">Categoría</th>
-                  <th className="py-2.5 pr-3 font-medium">Método</th>
                   <th className="py-2.5 pr-3 font-medium text-right">Monto</th>
-                  <th className="py-2.5 pr-3 font-medium text-right">Impuesto</th>
-                  <th className="py-2.5 pr-5 font-medium text-center">IA</th>
+                  <th className="py-2.5 pr-3 font-medium text-center">Decisión</th>
+                  {isSubmitted && <th className="py-2.5 pr-5 font-medium text-center">Acción</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {receipts.map((r) => {
                   const ext = EXTRACTION_BADGE[r.extractionStatus] ?? EXTRACTION_BADGE.PENDING;
                   const isManual = r.fileContentType === "application/manual";
+                  const dec = DECISION_BADGE[r.decision || "PENDING"];
+                  const isDeciding = decidingId === r.id;
                   return (
-                    <tr
-                      key={r.id}
-                      onClick={() => onViewReceipt(r)}
-                      className="hover:bg-seekop-50/30 cursor-pointer transition-colors"
-                    >
-                      <td className="py-2 pl-5 pr-2">
-                        <div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center overflow-hidden ring-1 ring-gray-200">
-                          {isManual ? (
-                            <PenLine size={13} className="text-emerald-500" />
-                          ) : r.fileContentType.startsWith("image/") ? (
-                            <img src={getAuthFileUrl(r.fileUrl)} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                          ) : (
-                            <FileText size={13} className="text-gray-400" />
+                    <React.Fragment key={r.id}>
+                      <tr className={`transition-colors ${r.decision === "REJECTED" ? "bg-red-50/40" : r.decision === "APPROVED" ? "bg-emerald-50/30" : "hover:bg-seekop-50/30"}`}>
+                        <td className="py-2 pl-5 pr-2">
+                          <div
+                            className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center overflow-hidden ring-1 ring-gray-200 cursor-pointer"
+                            onClick={() => onViewReceipt(r)}
+                          >
+                            {isManual ? (
+                              <PenLine size={13} className="text-emerald-500" />
+                            ) : r.fileContentType.startsWith("image/") ? (
+                              <img src={getAuthFileUrl(r.fileUrl)} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                            ) : (
+                              <FileText size={13} className="text-gray-400" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-3">
+                          <button onClick={() => onViewReceipt(r)} className="text-left hover:underline">
+                            <span className="font-medium text-gray-700">{r.vendorName || r.fileName}</span>
+                            {isManual && <span className="ml-1 text-[9px] text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded">Manual</span>}
+                          </button>
+                          {r.description && <p className="text-[10px] text-gray-400 mt-0.5 truncate max-w-[200px]">{r.description}</p>}
+                        </td>
+                        <td className="py-2 pr-3 text-gray-500">{r.receiptDate || "—"}</td>
+                        <td className="py-2 pr-3 text-gray-500">{r.category ? (CATEGORY_LABELS[r.category] ?? r.category) : "—"}</td>
+                        <td className="py-2 pr-3 text-right font-semibold text-gray-700">
+                          {r.totalAmount != null ? `$${r.totalAmount.toFixed(2)}` : "—"}
+                        </td>
+                        <td className="py-2 pr-3 text-center">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${dec.color}`}>
+                            {dec.icon} {dec.label}
+                          </span>
+                          {r.decisionComment && (
+                            <p className="text-[10px] text-red-500 mt-0.5 max-w-[120px] truncate" title={r.decisionComment}>
+                              💬 {r.decisionComment}
+                            </p>
                           )}
-                        </div>
-                      </td>
-                      <td className="py-2 pr-3 font-medium text-gray-700">{r.vendorName || r.fileName}{isManual && <span className="ml-1 text-[9px] text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded">Manual</span>}</td>
-                      <td className="py-2 pr-3 text-gray-500">{r.receiptDate || "—"}</td>
-                      <td className="py-2 pr-3 text-gray-500">{r.category ? (CATEGORY_LABELS[r.category] ?? r.category) : "—"}</td>
-                      <td className="py-2 pr-3 text-gray-500">{r.paymentMethod || "—"}</td>
-                      <td className="py-2 pr-3 text-right font-semibold text-gray-700">
-                        {r.totalAmount != null ? `$${r.totalAmount.toFixed(2)}` : "—"}
-                      </td>
-                      <td className="py-2 pr-3 text-right text-gray-500">
-                        {r.taxAmount != null ? `$${r.taxAmount.toFixed(2)}` : "—"}
-                      </td>
-                      <td className="py-2 pr-5 text-center">
-                        <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${ext.color}`}>
-                          {ext.icon}
-                          {r.extractionConfidence != null && ` ${(r.extractionConfidence * 100).toFixed(0)}%`}
-                        </span>
-                      </td>
-                    </tr>
+                        </td>
+                        {isSubmitted && (
+                          <td className="py-2 pr-5 text-center">
+                            {decideReceiptMut.isPending && isDeciding ? (
+                              <Loader2 size={14} className="animate-spin mx-auto text-gray-400" />
+                            ) : (
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setDecidingId(r.id); decideReceiptMut.mutate({ receiptId: r.id, decision: "APPROVED" }); }}
+                                  disabled={decideReceiptMut.isPending}
+                                  className={`p-1.5 rounded-lg transition-colors ${r.decision === "APPROVED" ? "bg-emerald-500 text-white" : "bg-emerald-50 text-emerald-600 hover:bg-emerald-100"}`}
+                                  title="Aprobar ticket"
+                                >
+                                  <ThumbsUp size={13} />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (r.decision === "REJECTED") {
+                                      setDecidingId(r.id);
+                                      decideReceiptMut.mutate({ receiptId: r.id, decision: "REJECTED" });
+                                    } else {
+                                      setRejectComments((prev) => ({ ...prev, [r.id]: prev[r.id] !== undefined ? prev[r.id] : "" }));
+                                    }
+                                  }}
+                                  disabled={decideReceiptMut.isPending}
+                                  className={`p-1.5 rounded-lg transition-colors ${r.decision === "REJECTED" ? "bg-red-500 text-white" : "bg-red-50 text-red-500 hover:bg-red-100"}`}
+                                  title="Rechazar ticket"
+                                >
+                                  <ThumbsDown size={13} />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                      {/* Reject comment input row */}
+                      {rejectComments[r.id] !== undefined && r.decision !== "REJECTED" && isSubmitted && (
+                        <tr className="bg-red-50/60">
+                          <td colSpan={isSubmitted ? 7 : 6} className="px-5 py-2">
+                            <div className="flex items-center gap-2">
+                              <MessageSquare size={13} className="text-red-400 shrink-0" />
+                              <input
+                                type="text"
+                                value={rejectComments[r.id] || ""}
+                                onChange={(e) => setRejectComments((prev) => ({ ...prev, [r.id]: e.target.value }))}
+                                placeholder="Motivo del rechazo (opcional)..."
+                                className="flex-1 px-2 py-1 border border-red-200 rounded text-xs bg-white focus:ring-1 focus:ring-red-400 focus:border-transparent"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    setDecidingId(r.id);
+                                    decideReceiptMut.mutate({ receiptId: r.id, decision: "REJECTED", rcComment: rejectComments[r.id] || undefined });
+                                    setRejectComments((prev) => { const n = { ...prev }; delete n[r.id]; return n; });
+                                  }
+                                }}
+                              />
+                              <button
+                                onClick={() => {
+                                  setDecidingId(r.id);
+                                  decideReceiptMut.mutate({ receiptId: r.id, decision: "REJECTED", rcComment: rejectComments[r.id] || undefined });
+                                  setRejectComments((prev) => { const n = { ...prev }; delete n[r.id]; return n; });
+                                }}
+                                className="px-2.5 py-1 bg-red-600 text-white rounded text-xs font-medium hover:bg-red-700"
+                              >
+                                Rechazar
+                              </button>
+                              <button
+                                onClick={() => setRejectComments((prev) => { const n = { ...prev }; delete n[r.id]; return n; })}
+                                className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -434,52 +565,61 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
         </div>
       )}
 
-      {/* Actions (only for SUBMITTED reports) */}
-      {report.status === "SUBMITTED" && (
+      {/* Finalize actions (only for SUBMITTED reports) */}
+      {isSubmitted && (
         <div className="px-5 py-4">
           {!showActions ? (
-            <button
-              onClick={() => setShowActions(true)}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-seekop-600 text-white rounded-lg text-sm font-medium hover:bg-seekop-700 transition-colors shadow-sm"
-            >
-              Tomar acción sobre este reporte
-            </button>
+            <div className="flex items-center gap-3 flex-wrap">
+              {allDecided && (
+                <button
+                  onClick={() => setShowActions(true)}
+                  className="flex items-center gap-1.5 px-4 py-2.5 bg-seekop-600 text-white rounded-lg text-sm font-medium hover:bg-seekop-700 transition-colors shadow-sm"
+                >
+                  <CheckCircle size={14} /> Finalizar revisión ({approvedReceipts.length} aprobados, {rejectedReceipts.length} rechazados)
+                </button>
+              )}
+              {!allDecided && pendingReceipts.length > 0 && (
+                <p className="text-xs text-gray-400 flex items-center gap-1.5">
+                  <AlertTriangle size={13} className="text-amber-500" />
+                  Revisa todos los tickets antes de finalizar. Faltan <strong className="text-gray-600">{pendingReceipts.length}</strong> por decidir.
+                </p>
+              )}
+              <div className="flex-1" />
+              <button
+                onClick={() => needsChangesMut.mutate()}
+                disabled={acting}
+                className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600 disabled:opacity-50 transition-colors shadow-sm"
+              >
+                {needsChangesMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={13} />}
+                Pedir correcciones
+              </button>
+            </div>
           ) : (
             <div className="space-y-3 bg-gray-50 -mx-5 -mb-4 px-5 py-4 rounded-b-xl border-t border-gray-100">
+              {/* Review summary */}
+              <div className="flex items-center gap-4 text-xs">
+                <span className="text-emerald-600 font-semibold">✓ {approvedReceipts.length} aprobados — ${approvedTotal.toFixed(2)}</span>
+                {rejectedReceipts.length > 0 && <span className="text-red-500 font-semibold">✗ {rejectedReceipts.length} rechazados</span>}
+                <span className="text-gray-500">Monto final: <strong className="text-seekop-700">${approvedTotal.toFixed(2)} {report.currency}</strong></span>
+              </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Comentario para el gerente (opcional)</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Comentario general (opcional)</label>
                 <textarea
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   rows={2}
-                  placeholder="Ej: Falta comprobante de casetas del día 10..."
+                  placeholder="Ej: Se rechazó el gasto del bar por no ser un gasto válido de viáticos..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-seekop-500 focus:border-transparent resize-none bg-white"
                 />
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 <button
-                  onClick={() => approveMut.mutate()}
+                  onClick={() => finalizeMut.mutate()}
                   disabled={acting}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-sm"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-seekop-600 text-white rounded-lg text-sm font-medium hover:bg-seekop-700 disabled:opacity-50 transition-colors shadow-sm"
                 >
-                  {approveMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                  Aprobar
-                </button>
-                <button
-                  onClick={() => needsChangesMut.mutate()}
-                  disabled={acting}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 disabled:opacity-50 transition-colors shadow-sm"
-                >
-                  {needsChangesMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />}
-                  Pedir correcciones
-                </button>
-                <button
-                  onClick={() => rejectMut.mutate()}
-                  disabled={acting}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors shadow-sm"
-                >
-                  {rejectMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
-                  Rechazar
+                  {finalizeMut.isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                  Confirmar y finalizar
                 </button>
                 <div className="flex-1" />
                 <button

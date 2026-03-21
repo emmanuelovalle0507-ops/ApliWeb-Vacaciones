@@ -115,6 +115,10 @@ def _receipt_to_out(r: ExpenseReceipt) -> ReceiptOut:
         paymentMethod=r.payment_method,
         category=r.category.value if r.category else None,
         description=r.description,
+        decision=r.decision.value if r.decision else "PENDING",
+        decisionComment=r.decision_comment,
+        decidedBy=str(r.decided_by) if r.decided_by else None,
+        decidedAt=r.decided_at,
         createdAt=r.created_at,
         updatedAt=r.updated_at,
     )

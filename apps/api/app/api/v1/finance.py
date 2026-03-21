@@ -15,18 +15,21 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_roles
 from app.db.session import get_db
 from app.models.expense_action import ExpenseAction
-from app.models.expense_receipt import ExpenseReceipt
+from app.models.expense_receipt import ExpenseReceipt, ReceiptDecision
 from app.models.expense_report import ExpenseReport, ExpenseReportStatus
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.expense_report_repo import ExpenseReportRepository
 from app.repositories.user_repo import UserRepository
 from app.repositories.team_repo import TeamRepository
 from app.schemas.auth import UserSummary
-from app.schemas.expense import DecisionIn, ExpenseAnalytics, PaginatedReportList, ReportOut
+from app.schemas.expense import (
+    DecisionIn, ExpenseAnalytics, FinalizeReviewIn, PaginatedReportList,
+    ReceiptDecisionIn, ReceiptOut, ReportOut,
+)
 from app.schemas.pagination import PaginationMeta, PaginationParams
 
-# Re-use helper from expenses module
-from app.api.v1.expenses import _report_to_out
+# Re-use helpers from expenses module
+from app.api.v1.expenses import _receipt_to_out, _report_to_out
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -210,6 +213,153 @@ def needs_changes_report(
     current_user: UserSummary = Depends(require_roles("FINANCE", "ADMIN")),
 ) -> ReportOut:
     return _decide_report(report_id, ExpenseReportStatus.NEEDS_CHANGES, "REPORT_NEEDS_CHANGES", payload, db, current_user)
+
+
+# ── Per-ticket Decision ───────────────────────────────
+@router.post("/reports/{report_id}/receipts/{receipt_id}/decision", response_model=ReceiptOut)
+def decide_receipt(
+    report_id: str,
+    receipt_id: str,
+    payload: ReceiptDecisionIn,
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("FINANCE", "ADMIN")),
+) -> ReceiptOut:
+    """Finance approves or rejects a single receipt inside a submitted report."""
+    if payload.decision not in ("APPROVED", "REJECTED"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Decisión debe ser APPROVED o REJECTED.")
+
+    repo = ExpenseReportRepository(db)
+    report = repo.get_by_id(report_id)
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
+    if report.status != ExpenseReportStatus.SUBMITTED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Solo se pueden revisar reportes con estatus SUBMITTED.")
+
+    receipt = db.query(ExpenseReceipt).filter(
+        ExpenseReceipt.id == receipt_id,
+        ExpenseReceipt.report_id == report_id,
+    ).first()
+    if not receipt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket no encontrado en este reporte.")
+
+    receipt.decision = ReceiptDecision(payload.decision)
+    receipt.decision_comment = payload.comment
+    receipt.decided_by = current_user.id
+    receipt.decided_at = datetime.now(timezone.utc)
+
+    AuditRepository(db).log(
+        actor_user_id=current_user.id,
+        action=f"RECEIPT_{payload.decision}",
+        entity_type="expense_receipt",
+        entity_id=receipt_id,
+        metadata={"report_id": report_id, "comment": payload.comment},
+    )
+    db.commit()
+    db.refresh(receipt)
+    return _receipt_to_out(receipt)
+
+
+# ── Finalize Review ───────────────────────────────────
+@router.post("/reports/{report_id}/finalize", response_model=ReportOut)
+def finalize_review(
+    report_id: str,
+    payload: FinalizeReviewIn = FinalizeReviewIn(),
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("FINANCE", "ADMIN")),
+) -> ReportOut:
+    """Finalize review of a report after per-ticket decisions.
+    Recalculates total with only APPROVED tickets. If all approved → APPROVED,
+    if all rejected → REJECTED, if mixed → APPROVED (with adjusted total).
+    """
+    from decimal import Decimal
+
+    repo = ExpenseReportRepository(db)
+    report = repo.get_by_id(report_id)
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
+    if report.status != ExpenseReportStatus.SUBMITTED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Solo se pueden finalizar reportes con estatus SUBMITTED.")
+
+    receipts = report.receipts or []
+    if not receipts:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El reporte no tiene tickets.")
+
+    # Check all tickets have been reviewed
+    pending = [r for r in receipts if r.decision == ReceiptDecision.PENDING]
+    if pending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Faltan {len(pending)} ticket(s) por revisar. Decide todos antes de finalizar.",
+        )
+
+    approved = [r for r in receipts if r.decision == ReceiptDecision.APPROVED]
+    rejected = [r for r in receipts if r.decision == ReceiptDecision.REJECTED]
+
+    # Recalculate total with only approved tickets
+    approved_total = Decimal("0")
+    for r in approved:
+        if r.total_amount:
+            approved_total += Decimal(str(r.total_amount))
+
+    report.total_amount = float(approved_total)
+    report.decided_by = current_user.id
+    report.decided_at = datetime.now(timezone.utc)
+    report.decision_comment = payload.comment
+
+    if len(rejected) == len(receipts):
+        report.status = ExpenseReportStatus.REJECTED
+        action_name = "REPORT_REJECTED"
+    else:
+        report.status = ExpenseReportStatus.APPROVED
+        action_name = "REPORT_APPROVED"
+
+    action = ExpenseAction(
+        actor_user_id=current_user.id,
+        report_id=report.id,
+        action=action_name,
+        comment=payload.comment,
+    )
+    db.add(action)
+
+    AuditRepository(db).log(
+        actor_user_id=current_user.id,
+        action=action_name,
+        entity_type="expense_report",
+        entity_id=report_id,
+        metadata={
+            "comment": payload.comment,
+            "approved_count": len(approved),
+            "rejected_count": len(rejected),
+            "approved_total": float(approved_total),
+        },
+    )
+    db.commit()
+    db.refresh(report)
+    return _report_to_out(report, db, include_receipts=True)
+
+
+# ── Reset receipt decisions (when needs-changes) ──────
+@router.post("/reports/{report_id}/reset-decisions", response_model=ReportOut)
+def reset_receipt_decisions(
+    report_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("FINANCE", "ADMIN")),
+) -> ReportOut:
+    """Reset all receipt decisions back to PENDING when requesting changes."""
+    repo = ExpenseReportRepository(db)
+    report = repo.get_by_id(report_id)
+    if not report:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reporte no encontrado.")
+
+    for receipt in (report.receipts or []):
+        receipt.decision = ReceiptDecision.PENDING
+        receipt.decision_comment = None
+        receipt.decided_by = None
+        receipt.decided_at = None
+
+    db.commit()
+    db.refresh(report)
+    return _report_to_out(report, db, include_receipts=True)
 
 
 # ── Export CSV ─────────────────────────────────────────

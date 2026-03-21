@@ -888,7 +888,11 @@ function ReportRow({ report, onSubmit, submitting, onViewReceipt }: {
                     key={rc.id}
                     onClick={() => onViewReceipt(rc)}
                     className={`flex items-center gap-3 bg-white px-3 py-2 rounded-lg border cursor-pointer transition-colors ${
-                      isNeedsChanges
+                      rc.decision === "REJECTED"
+                        ? "border-red-200 bg-red-50/40 hover:bg-red-50/60"
+                        : rc.decision === "APPROVED"
+                        ? "border-emerald-200 bg-emerald-50/30 hover:bg-emerald-50/50"
+                        : isNeedsChanges
                         ? "border-amber-200 hover:border-amber-400 hover:bg-amber-50/30"
                         : "border-gray-100 hover:border-seekop-200 hover:bg-seekop-50/30"
                     }`}
@@ -909,10 +913,25 @@ function ReportRow({ report, onSubmit, submitting, onViewReceipt }: {
                         {rc.category && <span>{CATEGORY_LABELS[rc.category] ?? rc.category}</span>}
                         {rc.receiptDate && <span>{rc.receiptDate}</span>}
                       </div>
+                      {rc.decision === "REJECTED" && rc.decisionComment && (
+                        <p className="text-[10px] text-red-500 mt-0.5">💬 {rc.decisionComment}</p>
+                      )}
                     </div>
-                    {isNeedsChanges ? (
+                    {/* Per-ticket decision badge */}
+                    {rc.decision === "APPROVED" && (
+                      <span className="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded font-medium border border-emerald-200 flex items-center gap-1">
+                        <CheckCircle size={10} /> Aprobado
+                      </span>
+                    )}
+                    {rc.decision === "REJECTED" && (
+                      <span className="text-[10px] text-red-600 bg-red-50 px-2 py-0.5 rounded font-medium border border-red-200 flex items-center gap-1" title={rc.decisionComment || ""}>
+                        <XCircle size={10} /> Rechazado
+                      </span>
+                    )}
+                    {(!rc.decision || rc.decision === "PENDING") && isNeedsChanges && (
                       <span className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded font-medium border border-amber-200">Editar</span>
-                    ) : (
+                    )}
+                    {(!rc.decision || rc.decision === "PENDING") && !isNeedsChanges && (
                       <Eye size={13} className="text-gray-300" />
                     )}
                   </div>

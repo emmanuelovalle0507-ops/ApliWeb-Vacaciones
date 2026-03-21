@@ -27,6 +27,10 @@ class ReceiptOut(BaseModel):
     paymentMethod: str | None = None
     category: str | None = None
     description: str | None = None
+    decision: str = "PENDING"
+    decisionComment: str | None = None
+    decidedBy: str | None = None
+    decidedAt: datetime | None = None
     createdAt: datetime
     updatedAt: datetime
 
@@ -102,6 +106,17 @@ class PaginatedReportList(BaseModel):
 
 
 class DecisionIn(BaseModel):
+    comment: str | None = None
+
+
+class ReceiptDecisionIn(BaseModel):
+    """Finance decides on a single receipt within a report."""
+    decision: str  # APPROVED or REJECTED
+    comment: str | None = None
+
+
+class FinalizeReviewIn(BaseModel):
+    """Finalize review of a report after per-ticket decisions."""
     comment: str | None = None
 
 

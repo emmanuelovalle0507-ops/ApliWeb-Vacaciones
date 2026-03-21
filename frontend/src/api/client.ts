@@ -95,6 +95,9 @@ export const api = {
     reject: impl.rejectReport,
     needsChanges: impl.needsChangesReport,
     exportReportUrl: impl.exportReportUrl,
+    decideReceipt: impl.decideReceipt,
+    finalizeReview: impl.finalizeReview,
+    resetReceiptDecisions: impl.resetReceiptDecisions,
   },
 };
 
