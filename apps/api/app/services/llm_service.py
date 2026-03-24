@@ -123,7 +123,7 @@ class LLMService:
                 {"role": "user", "content": user_content},
             ],
             "temperature": temperature,
-            "max_tokens": 2000,
+            "max_tokens": 4000,
         }
         body = json.dumps(payload).encode("utf-8")
 
@@ -168,28 +168,58 @@ class LLMService:
         return None
 
     def extract_receipt(self, image_base64: str, media_type: str = "image/jpeg") -> dict | None:
-        """Extract structured data from a receipt/ticket image using GPT-4o vision."""
+        """Extract ALL visible data from a receipt/ticket/factura image using GPT-4o vision."""
         system = (
-            "Eres un extractor de datos de tickets y facturas mexicanas. "
-            "Analiza la imagen y devuelve SOLO JSON válido con estos campos:\n"
+            "Eres un extractor exhaustivo de datos de tickets, recibos y facturas mexicanas. "
+            "Tu objetivo es extraer TODA la información visible, no solo un resumen.\n\n"
+            "Devuelve SOLO JSON válido con esta estructura:\n"
             "{\n"
             '  "vendor_name": "nombre del comercio/proveedor",\n'
+            '  "vendor_address": "dirección del comercio si aparece",\n'
+            '  "vendor_phone": "teléfono si aparece",\n'
             '  "receipt_date": "YYYY-MM-DD",\n'
+            '  "receipt_time": "HH:MM si aparece",\n'
+            '  "receipt_number": "número de ticket/folio si aparece",\n'
             '  "total_amount": 123.45,\n'
+            '  "subtotal": 105.56,\n'
             '  "currency": "MXN",\n'
-            '  "tax_amount": 19.76,\n'
+            '  "tax_amount": 17.89,\n'
+            '  "tip_amount": null,\n'
+            '  "discount_amount": null,\n'
             '  "payment_method": "CASH|CARD|TRANSFER|UNKNOWN",\n'
+            '  "card_last_four": "1234 si pagó con tarjeta",\n'
             '  "category": "GASOLINE|TOLLS|FOOD|HOTEL|TRANSPORT|PARKING|SUPPLIES|OTHER",\n'
             '  "description": "descripción corta del gasto",\n'
+            '  "line_items": [\n'
+            '    {\n'
+            '      "description": "nombre/descripción del artículo o servicio",\n'
+            '      "quantity": 2,\n'
+            '      "unit_price": 52.78,\n'
+            '      "amount": 105.56,\n'
+            '      "unit": "pieza/litro/kg/servicio si se indica"\n'
+            "    }\n"
+            "  ],\n"
+            '  "additional_info": {\n'
+            '    "cualquier_otro_dato_visible": "valor"\n'
+            "  },\n"
             '  "confidence": 0.85,\n'
             '  "raw_text": "texto completo detectado en la imagen",\n'
-            '  "uuid_fiscal": "UUID del CFDI si es factura (formato XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)",\n'
+            '  "uuid_fiscal": "UUID del CFDI si es factura (XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX)",\n'
             '  "rfc_emisor": "RFC del emisor/proveedor si aparece",\n'
-            '  "rfc_receptor": "RFC del receptor/comprador si aparece"\n'
-            "}\n"
-            "Si un campo no es detectado, usa null. Siempre incluye confidence (0.0 a 1.0). "
-            "Si la imagen es una factura CFDI mexicana, busca el UUID fiscal, RFC del emisor y RFC del receptor. "
-            "Responde SOLO con el JSON, sin markdown ni texto extra."
+            '  "rfc_receptor": "RFC del receptor/comprador si aparece",\n'
+            '  "regimen_fiscal": "régimen fiscal del emisor si aparece",\n'
+            '  "uso_cfdi": "uso del CFDI si aparece (ej: G03, P01)",\n'
+            '  "metodo_pago": "PUE o PPD si aparece",\n'
+            '  "forma_pago": "código de forma de pago SAT si aparece"\n'
+            "}\n\n"
+            "REGLAS IMPORTANTES:\n"
+            "- Extrae CADA artículo/producto/servicio individual en line_items, no solo el total.\n"
+            "- Si el ticket lista 3 productos, devuelve los 3 en line_items.\n"
+            "- Si hay datos visibles que no encajan en los campos definidos, ponlos en additional_info.\n"
+            "- Si un campo no es detectado, usa null. NO inventes datos.\n"
+            "- Siempre incluye confidence (0.0 a 1.0).\n"
+            "- Si es factura CFDI, extrae UUID fiscal, RFCs, régimen fiscal, uso CFDI.\n"
+            "- Responde SOLO con el JSON, sin markdown ni texto extra."
         )
         result = self._chat_vision(system, image_base64, media_type, temperature=0.0)
         if not result:

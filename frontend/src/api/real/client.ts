@@ -823,6 +823,14 @@ export type ExpenseReceipt = {
   paymentMethod: string | null;
   category: string | null;
   description: string | null;
+  lineItems: Array<{
+    description: string;
+    quantity?: number | null;
+    unit_price?: number | null;
+    amount?: number | null;
+    unit?: string | null;
+    clave_prod_serv?: string | null;
+  }> | null;
   isCfdi: boolean;
   uuidFiscal: string | null;
   rfcEmisor: string | null;

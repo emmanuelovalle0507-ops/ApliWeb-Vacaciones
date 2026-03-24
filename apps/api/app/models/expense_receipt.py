@@ -73,6 +73,9 @@ class ExpenseReceipt(Base):
     )
     description: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
+    # Line items extracted from receipt (each item with description, qty, unit_price, amount)
+    line_items: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
+
     # CFDI fields
     is_cfdi: Mapped[bool] = mapped_column(default=False, nullable=False, server_default="false")
     uuid_fiscal: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)

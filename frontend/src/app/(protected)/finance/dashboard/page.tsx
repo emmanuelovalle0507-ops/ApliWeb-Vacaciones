@@ -782,6 +782,40 @@ function ReceiptPreviewModal({ receipt, onClose }: { receipt: ExpenseReceipt; on
           )}
         </div>
 
+        {/* Line items */}
+        {receipt.lineItems && receipt.lineItems.length > 0 && (
+          <div className="px-6 py-4 border-t border-gray-100">
+            <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+              Detalle de artículos ({receipt.lineItems.length})
+            </h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-gray-400 border-b border-gray-100">
+                    <th className="py-1.5 pr-3 font-medium">Descripción</th>
+                    <th className="py-1.5 pr-3 font-medium text-center">Cant.</th>
+                    <th className="py-1.5 pr-3 font-medium text-right">P. Unit.</th>
+                    <th className="py-1.5 font-medium text-right">Importe</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {receipt.lineItems.map((item, idx) => (
+                    <tr key={idx} className="text-gray-700">
+                      <td className="py-1.5 pr-3 max-w-[300px]">
+                        <span className="block truncate" title={item.description}>{item.description}</span>
+                        {item.clave_prod_serv && <span className="text-[9px] text-gray-400 font-mono">{item.clave_prod_serv}</span>}
+                      </td>
+                      <td className="py-1.5 pr-3 text-center">{item.quantity ?? "—"}{item.unit ? ` ${item.unit}` : ""}</td>
+                      <td className="py-1.5 pr-3 text-right">{item.unit_price != null ? `$${Number(item.unit_price).toFixed(2)}` : "—"}</td>
+                      <td className="py-1.5 text-right font-medium">{item.amount != null ? `$${Number(item.amount).toFixed(2)}` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         {receipt.isCfdi && (
           <div className="px-6 py-4 border-t border-gray-100 bg-blue-50/60">
             <h4 className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-2">Datos Fiscales (CFDI)</h4>

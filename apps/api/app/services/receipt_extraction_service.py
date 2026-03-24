@@ -95,6 +95,11 @@ class ReceiptExtractionService:
                 receipt.category = ExpenseCategory(raw_category)
             receipt.description = self._safe_str(result.get("description"), 500)
 
+            # Line items (individual products/services from the receipt)
+            raw_items = result.get("line_items")
+            if isinstance(raw_items, list) and raw_items:
+                receipt.line_items = raw_items
+
             # If AI detected CFDI fields, populate them
             ai_uuid = self._safe_str(result.get("uuid_fiscal"), 36)
             ai_rfc_emisor = self._safe_str(result.get("rfc_emisor"), 13)

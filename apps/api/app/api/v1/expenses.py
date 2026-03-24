@@ -115,6 +115,7 @@ def _receipt_to_out(r: ExpenseReceipt) -> ReceiptOut:
         paymentMethod=r.payment_method,
         category=r.category.value if r.category else None,
         description=r.description,
+        lineItems=r.line_items,
         isCfdi=r.is_cfdi,
         uuidFiscal=r.uuid_fiscal,
         rfcEmisor=r.rfc_emisor,
@@ -252,6 +253,18 @@ async def upload_receipts(
             receipt.description = "; ".join(
                 c.get("descripcion", "") for c in cfdi.conceptos[:5]
             )[:500] if cfdi.conceptos else None
+            # Save individual line items from CFDI Conceptos
+            if cfdi.conceptos:
+                receipt.line_items = [
+                    {
+                        "description": c.get("descripcion", ""),
+                        "quantity": c.get("cantidad"),
+                        "unit_price": c.get("valor_unitario"),
+                        "amount": c.get("importe"),
+                        "clave_prod_serv": c.get("clave_prod_serv", ""),
+                    }
+                    for c in cfdi.conceptos
+                ]
             receipt.extraction_status = ExtractionStatus.DONE
             receipt.extraction_confidence = 1.0
             receipt.extraction_json = {
