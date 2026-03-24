@@ -828,6 +828,10 @@ export type ExpenseReceipt = {
   rfcEmisor: string | null;
   rfcReceptor: string | null;
   cfdiXmlUrl: string | null;
+  decision: "PENDING" | "APPROVED" | "REJECTED";
+  decisionComment: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -848,6 +852,10 @@ export type ExpenseReport = {
   decisionComment: string | null;
   decidedBy: string | null;
   decidedAt: string | null;
+  paymentStatus: "PENDING" | "PAID";
+  paymentProofUrl: string | null;
+  paidAt: string | null;
+  paidBy: string | null;
   createdAt: string;
   updatedAt: string;
   receipts: ExpenseReceipt[];
@@ -905,6 +913,30 @@ export async function updateReceipt(id: string, data: Partial<{
   return request<ExpenseReceipt>(`/expenses/receipts/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),
+  });
+}
+
+export async function decideReceipt(
+  reportId: string, receiptId: string, decision: "APPROVED" | "REJECTED", comment?: string,
+): Promise<ExpenseReceipt> {
+  return request<ExpenseReceipt>(`/finance/reports/${reportId}/receipts/${receiptId}/decision`, {
+    method: "POST",
+    body: JSON.stringify({ decision, comment: comment || null }),
+  });
+}
+
+export async function finalizeReview(
+  reportId: string, comment?: string,
+): Promise<ExpenseReport> {
+  return request<ExpenseReport>(`/finance/reports/${reportId}/finalize`, {
+    method: "POST",
+    body: JSON.stringify({ comment: comment || null }),
+  });
+}
+
+export async function resetReceiptDecisions(reportId: string): Promise<ExpenseReport> {
+  return request<ExpenseReport>(`/finance/reports/${reportId}/reset-decisions`, {
+    method: "POST",
   });
 }
 
@@ -1005,4 +1037,24 @@ export async function needsChangesReport(id: string, comment?: string): Promise<
 
 export function exportReportUrl(id: string): string {
   return `${BASE_URL}/finance/reports/${id}/export`;
+}
+
+export async function markReportPaid(id: string, file?: File): Promise<ExpenseReport> {
+  const token = getToken();
+  const formData = new FormData();
+  if (file) formData.append("file", file);
+  const res = await fetch(`${BASE_URL}/finance/reports/${id}/mark-paid`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export function paymentProofUrl(id: string): string {
+  return `${BASE_URL}/finance/reports/${id}/payment-proof`;
 }

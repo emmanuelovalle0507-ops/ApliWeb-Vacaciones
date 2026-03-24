@@ -32,6 +32,10 @@ class ReceiptOut(BaseModel):
     rfcEmisor: str | None = None
     rfcReceptor: str | None = None
     cfdiXmlUrl: str | None = None
+    decision: str = "PENDING"
+    decisionComment: str | None = None
+    decidedBy: str | None = None
+    decidedAt: datetime | None = None
     createdAt: datetime
     updatedAt: datetime
 
@@ -95,6 +99,10 @@ class ReportOut(BaseModel):
     decisionComment: str | None = None
     decidedBy: str | None = None
     decidedAt: datetime | None = None
+    paymentStatus: str = "PENDING"
+    paymentProofUrl: str | None = None
+    paidAt: datetime | None = None
+    paidBy: str | None = None
     createdAt: datetime
     updatedAt: datetime
     receipts: list[ReceiptOut] = []
@@ -107,6 +115,17 @@ class PaginatedReportList(BaseModel):
 
 
 class DecisionIn(BaseModel):
+    comment: str | None = None
+
+
+class ReceiptDecisionIn(BaseModel):
+    """Finance decides on a single receipt within a report."""
+    decision: str  # APPROVED or REJECTED
+    comment: str | None = None
+
+
+class FinalizeReviewIn(BaseModel):
+    """Finalize review of a report after per-ticket decisions."""
     comment: str | None = None
 
 
