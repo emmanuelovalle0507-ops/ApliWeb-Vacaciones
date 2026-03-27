@@ -430,11 +430,44 @@ class VacationRequestService:
             raise ValueError("Solicitud no encontrada.")
         if request.employee_id != employee_uuid:
             raise PermissionError("No puedes cancelar la solicitud de otro empleado.")
-        if request.status != VacationRequestStatus.PENDING:
-            raise ValueError("Solo se pueden cancelar solicitudes pendientes.")
+        if request.status not in (VacationRequestStatus.PENDING, VacationRequestStatus.APPROVED):
+            raise ValueError("Solo se pueden cancelar solicitudes pendientes o aprobadas.")
+
+        was_approved = request.status == VacationRequestStatus.APPROVED
+
+        if was_approved:
+            if request.start_date <= self._today():
+                raise ValueError(
+                    "No puedes cancelar vacaciones aprobadas que ya iniciaron o están en curso. "
+                    "Contacta a tu manager o administrador."
+                )
 
         request.status = VacationRequestStatus.CANCELLED
         request.cancelled_at = datetime.now(timezone.utc)
+
+        # Refund balance if request was already approved
+        if was_approved:
+            year_days = self._split_days_by_year(request.start_date, request.end_date)
+            for yr, days in year_days.items():
+                balance = self.balance_repo.get_by_user_year_for_update(str(request.employee_id), yr)
+                if balance:
+                    balance.available_days += days
+                    balance.used_days -= days
+                    if balance.used_days < Decimal("0"):
+                        balance.used_days = Decimal("0")
+                    balance.version += 1
+
+            self.adjustment_repo.add(
+                BalanceAdjustment(
+                    user_id=request.employee_id,
+                    request_id=request.id,
+                    adjustment_type=BalanceAdjustmentType.CREDIT_CANCEL,
+                    days_delta=request.requested_days,
+                    performed_by=employee_uuid,
+                    reason="Cancelación de vacaciones aprobadas",
+                    operation_key=f"cancel:{request.id}",
+                )
+            )
 
         self.audit_repo.add(
             AuditLog(
@@ -442,7 +475,7 @@ class VacationRequestService:
                 action="REQUEST_CANCELLED",
                 entity_type="vacation_request",
                 entity_id=str(request.id),
-                metadata_={},
+                metadata_={"was_approved": was_approved},
             )
         )
         self.db.flush()
@@ -459,6 +492,82 @@ class VacationRequestService:
                 )
         except Exception:
             pass
+
+        return request
+
+    def edit_request(self, request_id: str, employee_id: str, start_date: date, end_date: date, reason: str | None) -> VacationRequest:
+        employee_uuid = UUID(employee_id)
+        request = self.request_repo.get_by_id_for_update(request_id)
+        if not request:
+            raise ValueError("Solicitud no encontrada.")
+        if request.employee_id != employee_uuid:
+            raise PermissionError("No puedes editar la solicitud de otro empleado.")
+        if request.status != VacationRequestStatus.PENDING:
+            raise ValueError("Solo se pueden editar solicitudes pendientes.")
+
+        if start_date < self._today():
+            raise ValueError("La fecha de inicio no puede ser en el pasado.")
+
+        requested_days = self._calculate_requested_days(start_date, end_date)
+        team_id = str(request.team_id) if request.team_id else None
+
+        if not team_id:
+            employee = self.user_repo.get_by_id(employee_id)
+            if employee and employee.team_id:
+                team_id = str(employee.team_id)
+
+        # Validate overlap excluding the current request
+        existing = self.request_repo.list_by_employee(employee_id)
+        for req in existing:
+            if str(req.id) == request_id:
+                continue
+            if req.status.value in ("PENDING", "APPROVED"):
+                if req.start_date <= end_date and req.end_date >= start_date:
+                    raise PolicyValidationError(
+                        f"Ya tienes una solicitud que se traslapa en las fechas "
+                        f"{req.start_date.strftime('%d/%m/%Y')} - {req.end_date.strftime('%d/%m/%Y')} "
+                        f"(estado: {req.status.value})."
+                    )
+
+        if team_id:
+            self._validate_notice_days(team_id, start_date)
+            self._validate_balance_for_request(employee_id, start_date, end_date)
+            self._validate_team_daily_capacity(team_id, start_date, end_date)
+
+        request.start_date = start_date
+        request.end_date = end_date
+        request.requested_days = requested_days
+        request.reason = reason
+
+        self.audit_repo.add(
+            AuditLog(
+                actor_user_id=employee_uuid,
+                action="REQUEST_EDITED",
+                entity_type="vacation_request",
+                entity_id=str(request.id),
+                metadata_={
+                    "new_start_date": start_date.isoformat(),
+                    "new_end_date": end_date.isoformat(),
+                    "requested_days": self._to_float(requested_days),
+                },
+            )
+        )
+        self.db.flush()
+
+        # Notify manager about the edit
+        try:
+            employee = self.user_repo.get_by_id(employee_id)
+            if employee and request.manager_id:
+                self.notif_service.notify_request_edited(
+                    request_id=str(request.id),
+                    employee_name=employee.full_name,
+                    manager_id=str(request.manager_id),
+                    start_date=start_date.strftime("%d/%m/%Y"),
+                    end_date=end_date.strftime("%d/%m/%Y"),
+                    days=self._to_float(requested_days),
+                )
+        except Exception:
+            pass  # notification failure must not block edit
 
         return request
 

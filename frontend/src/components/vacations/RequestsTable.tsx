@@ -16,7 +16,9 @@ interface RequestsTableProps {
   onApprove?: (req: VacationRequest) => void;
   onReject?: (req: VacationRequest) => void;
   onCancel?: (req: VacationRequest) => void;
+  onEdit?: (req: VacationRequest) => void;
   onView?: (req: VacationRequest) => void;
+  onExportICS?: (req: VacationRequest) => void;
   emptyMessage?: string;
 }
 
@@ -29,7 +31,9 @@ export default function RequestsTable({
   onApprove,
   onReject,
   onCancel,
+  onEdit,
   onView,
+  onExportICS,
   emptyMessage = "No hay solicitudes.",
 }: RequestsTableProps) {
   const columns: Column<VacationRequest>[] = [];
@@ -71,14 +75,25 @@ export default function RequestsTable({
       header: "Acciones",
       render: (row) => {
         if (readOnly) {
-          return onView ? (
-            <Button size="sm" variant="ghost" onClick={() => onView(row)}>
-              Ver detalle
-            </Button>
-          ) : (
-            <span className="text-xs text-gray-400">—</span>
+          return (
+            <div className="flex gap-2">
+              {onView && (
+                <Button size="sm" variant="ghost" onClick={() => onView(row)}>
+                  Ver detalle
+                </Button>
+              )}
+              {onExportICS && row.status === "APPROVED" && (
+                <Button size="sm" variant="ghost" onClick={() => onExportICS(row)} title="Agregar a calendario">
+                  📅
+                </Button>
+              )}
+              {!onView && !onExportICS && <span className="text-xs text-gray-400">—</span>}
+            </div>
           );
         }
+
+        const today = new Date().toISOString().slice(0, 10);
+        const isFuture = row.startDate > today;
 
         if (row.status === "PENDING") {
           return (
@@ -93,7 +108,39 @@ export default function RequestsTable({
                   Rechazar
                 </Button>
               )}
+              {onEdit && (
+                <Button size="sm" variant="ghost" onClick={() => onEdit(row)}>
+                  Editar
+                </Button>
+              )}
               {onCancel && (
+                <Button size="sm" variant="ghost" onClick={() => onCancel(row)}>
+                  Cancelar
+                </Button>
+              )}
+              {onView && (
+                <Button size="sm" variant="ghost" onClick={() => onView(row)}>
+                  Ver
+                </Button>
+              )}
+            </div>
+          );
+        }
+
+        if (row.status === "APPROVED") {
+          return (
+            <div className="flex gap-2">
+              {onView && (
+                <Button size="sm" variant="ghost" onClick={() => onView(row)}>
+                  Ver detalle
+                </Button>
+              )}
+              {onExportICS && (
+                <Button size="sm" variant="ghost" onClick={() => onExportICS(row)} title="Agregar a calendario">
+                  📅
+                </Button>
+              )}
+              {isFuture && onCancel && (
                 <Button size="sm" variant="ghost" onClick={() => onCancel(row)}>
                   Cancelar
                 </Button>

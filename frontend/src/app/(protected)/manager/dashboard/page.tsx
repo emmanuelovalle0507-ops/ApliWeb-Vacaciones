@@ -15,6 +15,7 @@ import TeamPolicyForm from "@/components/vacations/TeamPolicyForm";
 import TeamPolicyAgentPanel from "@/components/ai/TeamPolicyAgentPanel";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import VacationCalendar from "@/components/calendar/VacationCalendar";
+import RequestDetailModal from "@/components/vacations/RequestDetailModal";
 import { useToast } from "@/components/ui/Toast";
 
 type ModalAction = "approve" | "reject";
@@ -28,6 +29,7 @@ export default function ManagerDashboardPage() {
   const [selectedReq, setSelectedReq] = useState<VacationRequest | null>(null);
   const [modalAction, setModalAction] = useState<ModalAction>("approve");
   const [modalOpen, setModalOpen] = useState(false);
+  const [viewTarget, setViewTarget] = useState<VacationRequest | null>(null);
 
   const pendingQ = useQuery({
     queryKey: ["pendingApprovals", user?.id],
@@ -180,7 +182,14 @@ export default function ManagerDashboardPage() {
             data={historyQ.data ?? []}
             isLoading={historyQ.isLoading}
             showEmployee
+            showActions
             readOnly
+            onView={(req) => setViewTarget(req)}
+            onExportICS={(req) => {
+              api.calendarExport.exportICS(req.id)
+                .then(() => toast("success", "Archivo .ics descargado"))
+                .catch((e: Error) => toast("error", e.message || "Error al exportar"));
+            }}
             emptyMessage="No hay solicitudes en el historial."
           />
         </div>
@@ -279,6 +288,14 @@ export default function ManagerDashboardPage() {
 
         {/* Tabs: Solicitudes | Políticas | IA */}
         <Tabs tabs={tabs} defaultTab="requests" />
+
+        {/* Detail modal for history */}
+        <RequestDetailModal
+          open={!!viewTarget}
+          onClose={() => setViewTarget(null)}
+          request={viewTarget}
+          onToast={toast}
+        />
       </div>
     </RoleGuard>
   );

@@ -450,6 +450,18 @@ def list_audit_logs(
     )
 
 
+# ── Reminders ──────────────────────────────────────────────────────
+@router.post("/reminders/stale-requests")
+def send_stale_reminders(
+    older_than_days: int = Query(default=3, ge=1, le=30),
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("ADMIN")),
+):
+    from app.services.reminder_service import ReminderService
+    service = ReminderService(db)
+    return service.send_stale_request_reminders(older_than_days)
+
+
 # ── Reports (CSV) ──────────────────────────────────────────────────
 @router.get("/reports/requests")
 def export_requests_report(

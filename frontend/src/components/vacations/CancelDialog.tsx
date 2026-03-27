@@ -38,6 +38,14 @@ export default function CancelDialog({
           ¿Estás seguro de que deseas cancelar esta solicitud? Esta acción no se puede deshacer.
         </p>
 
+        {request.status === "APPROVED" && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-sm text-amber-800 font-medium">
+              Esta solicitud ya fue aprobada. Al cancelarla se te devolverán {request.requestedBusinessDays} día(s) a tu saldo.
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm p-3 bg-gray-50 rounded-lg">
           <span className="text-gray-500">Fechas</span>
           <span className="font-medium text-gray-900">

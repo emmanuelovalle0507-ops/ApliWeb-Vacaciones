@@ -11,6 +11,12 @@ class VacationRequestCreate(BaseModel):
     reason: str | None = None
 
 
+class VacationRequestUpdate(BaseModel):
+    start_date: date
+    end_date: date
+    reason: str | None = None
+
+
 class VacationRequestDecision(BaseModel):
     decision_comment: str | None = None
 

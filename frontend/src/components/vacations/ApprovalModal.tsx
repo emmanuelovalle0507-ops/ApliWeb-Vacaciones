@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,8 +9,10 @@ import { StatusBadge } from "@/components/ui/Badge";
 import Textarea from "@/components/ui/Textarea";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
-import type { VacationRequest } from "@/types";
+import ConflictPanel from "@/components/vacations/ConflictPanel";
+import type { VacationRequest, ConflictAnalysis } from "@/types";
 import { formatDate } from "@/lib/format";
+import { api } from "@/api/client";
 
 type Action = "approve" | "reject";
 
@@ -49,7 +51,26 @@ export default function ApprovalModal({
     resolver: zodResolver(schema),
   });
 
+  const [conflictData, setConflictData] = useState<ConflictAnalysis | null>(null);
+  const [conflictLoading, setConflictLoading] = useState(false);
+  const [conflictError, setConflictError] = useState<string>();
+
   useEffect(() => { reset(); }, [action, open, reset]);
+
+  useEffect(() => {
+    if (open && request && action === "approve") {
+      setConflictLoading(true);
+      setConflictError(undefined);
+      setConflictData(null);
+      api.conflictAnalysis.analyze(request.id)
+        .then(setConflictData)
+        .catch((e: Error) => setConflictError(e.message))
+        .finally(() => setConflictLoading(false));
+    } else {
+      setConflictData(null);
+      setConflictError(undefined);
+    }
+  }, [open, request, action]);
 
   const handleClose = () => {
     reset();
@@ -93,6 +114,10 @@ export default function ApprovalModal({
               <p className="text-xs text-gray-500 mb-1">Comentario del empleado</p>
               <p className="text-sm text-gray-700">{request.employeeComment}</p>
             </div>
+          )}
+
+          {action === "approve" && (
+            <ConflictPanel analysis={conflictData} loading={conflictLoading} error={conflictError} />
           )}
 
           <Textarea

@@ -387,10 +387,41 @@ export async function createRequest(
   return mapRequest(req);
 }
 
-export async function listMyRequests(_userId: string, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
-  const url = appendQS("/vacation-requests/me", paginationQS(pagination));
-  const result = await request<BackendVacationRequestList>(url);
+export async function listMyRequests(
+  _userId: string,
+  pagination?: PaginationParams,
+  filters?: { status?: string; startDate?: string; endDate?: string },
+): Promise<PaginatedResponse<VacationRequest>> {
+  const params = new URLSearchParams();
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.startDate) params.set("start_date", filters.startDate);
+  if (filters?.endDate) params.set("end_date", filters.endDate);
+  if (pagination?.page) params.set("page", String(pagination.page));
+  if (pagination?.pageSize) params.set("page_size", String(pagination.pageSize));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const result = await request<BackendVacationRequestList>(`/vacation-requests/me${qs}`);
   return { items: result.items.map(mapRequest), pagination: mapPagination(result.pagination) };
+}
+
+export async function getRequest(requestId: string): Promise<VacationRequest> {
+  const req = await request<BackendVacationRequest>(`/vacation-requests/${requestId}`);
+  return mapRequest(req);
+}
+
+export async function editRequest(
+  requestId: string,
+  _userId: string,
+  payload: CreateRequestPayload
+): Promise<VacationRequest> {
+  const req = await request<BackendVacationRequest>(`/vacation-requests/${requestId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      start_date: payload.startDate,
+      end_date: payload.endDate,
+      reason: payload.employeeComment,
+    }),
+  });
+  return mapRequest(req);
 }
 
 export async function cancelRequest(requestId: string, _userId: string): Promise<VacationRequest> {
@@ -1052,4 +1083,37 @@ export async function markReportPaid(id: string, file?: File): Promise<ExpenseRe
 
 export function paymentProofUrl(id: string): string {
   return `${BASE_URL}/finance/reports/${id}/payment-proof`;
+}
+
+// ── Conflict Analysis ──────────────────────────────────
+export async function analyzeConflict(requestId: string): Promise<ConflictAnalysis> {
+  return request<ConflictAnalysis>(`/conflict-analysis/request/${requestId}`);
+}
+
+export async function suggestDates(desiredDays: number, searchMonths: number = 3): Promise<DateSuggestion[]> {
+  return request<DateSuggestion[]>(`/conflict-analysis/suggest-dates?desired_days=${desiredDays}&search_months=${searchMonths}`);
+}
+
+// ── Calendar Export (ICS) ──────────────────────────────
+export async function exportICS(requestId: string): Promise<string> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const res = await fetch(`${BASE_URL}/vacation-requests/${requestId}/export-ics`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `Error ${res.status}`);
+  }
+  const text = await res.text();
+  // Trigger browser download
+  const blob = new Blob([text], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = res.headers.get("content-disposition")?.match(/filename="(.+)"/)?.[1] || "vacaciones.ics";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  return text;
 }

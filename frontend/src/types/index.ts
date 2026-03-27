@@ -241,6 +241,51 @@ export interface AuditLogEntry {
   createdAt: string;
 }
 
+// ── Conflict Analysis ─────────────────────────────────
+export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export interface DailyConflict {
+  date: string;
+  date_label: string;
+  occupied_current: number;
+  occupied_if_approved: number;
+  off_names: string[];
+  max_allowed_off: number;
+  available_slots: number;
+  coverage_pct: number;
+  exceeds_policy: boolean;
+}
+
+export interface OverlappingRequest {
+  employee_name: string;
+  start_date: string;
+  end_date: string;
+  days: number;
+}
+
+export interface ConflictAnalysis {
+  request_id: string;
+  requester_name: string;
+  risk_level: RiskLevel;
+  team_size: number;
+  days_requested: number;
+  daily_analysis: DailyConflict[];
+  overlapping_requests: OverlappingRequest[];
+  worst_day: DailyConflict | null;
+  summary: string;
+}
+
+export interface DateSuggestion {
+  start_date: string;
+  end_date: string;
+  days: number;
+  max_team_occupancy: number;
+  avg_team_occupancy: number;
+  min_coverage_pct: number;
+  exceeds_policy: boolean;
+  has_bridge: boolean;
+}
+
 // ── Navigation ─────────────────────────────────────────
 export interface NavItem {
   label: string;

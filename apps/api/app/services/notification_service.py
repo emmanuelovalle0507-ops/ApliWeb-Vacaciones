@@ -138,6 +138,36 @@ class NotificationService:
             action_url=self._app_url("/manager/dashboard"),
         )
 
+    def notify_stale_reminder(self, request_id: str, employee_name: str, manager_id: str, start_date: str, end_date: str, days_waiting: int) -> Notification:
+        """Remind manager about a pending request that has been waiting too long."""
+        return self._create_and_send(
+            user_id=manager_id,
+            notif_type=NotificationType.REQUEST_CREATED,
+            title="Recordatorio: solicitud pendiente",
+            body=(
+                f"La solicitud de {employee_name} ({start_date} al {end_date}) "
+                f"lleva {days_waiting} día(s) sin respuesta. Por favor revísala."
+            ),
+            entity_type="vacation_request",
+            entity_id=request_id,
+            action_url=self._app_url("/manager/dashboard"),
+        )
+
+    def notify_request_edited(self, request_id: str, employee_name: str, manager_id: str, start_date: str, end_date: str, days: float) -> Notification:
+        """Notify manager that an employee edited a pending request."""
+        return self._create_and_send(
+            user_id=manager_id,
+            notif_type=NotificationType.REQUEST_CREATED,
+            title="Solicitud de vacaciones editada",
+            body=(
+                f"{employee_name} ha modificado su solicitud de vacaciones. "
+                f"Nuevas fechas: {start_date} al {end_date} ({days} días hábiles). Revísala."
+            ),
+            entity_type="vacation_request",
+            entity_id=request_id,
+            action_url=self._app_url("/manager/dashboard"),
+        )
+
     def notify_policy_updated(self, team_member_ids: list[str], updater_name: str, max_off: int, min_notice: int) -> list[Notification]:
         """Notify all team members about a policy update."""
         results = []

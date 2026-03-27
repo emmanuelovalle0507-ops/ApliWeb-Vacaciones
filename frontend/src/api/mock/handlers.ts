@@ -167,10 +167,48 @@ export async function createRequest(
   return req;
 }
 
-export async function listMyRequests(userId: string, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
+export async function listMyRequests(
+  userId: string,
+  pagination?: PaginationParams,
+  filters?: { status?: string; startDate?: string; endDate?: string },
+): Promise<PaginatedResponse<VacationRequest>> {
   await delay(200);
-  const all = db.listRequestsByUser(userId);
+  let all = db.listRequestsByUser(userId);
+  if (filters?.status) all = all.filter((r) => r.status === filters.status);
+  if (filters?.startDate) all = all.filter((r) => r.startDate >= filters.startDate!);
+  if (filters?.endDate) all = all.filter((r) => r.endDate <= filters.endDate!);
   return paginate(all, pagination);
+}
+
+export async function getRequest(requestId: string): Promise<VacationRequest> {
+  await delay(200);
+  const req = db.findRequestById(requestId);
+  if (!req) throw new Error("Solicitud no encontrada");
+  return req;
+}
+
+export async function editRequest(
+  requestId: string,
+  userId: string,
+  payload: CreateRequestPayload
+): Promise<VacationRequest> {
+  await delay(400);
+  const req = db.findRequestById(requestId);
+  if (!req) throw new Error("Solicitud no encontrada");
+  if (req.userId !== userId) throw new Error("No autorizado");
+  if (req.status !== "PENDING") throw new Error("Solo se pueden editar solicitudes pendientes");
+
+  const bizDays = businessDaysBetween(payload.startDate, payload.endDate);
+  if (bizDays <= 0) throw new Error("Rango de fechas inválido");
+
+  const updated = db.updateRequest(requestId, {
+    startDate: payload.startDate,
+    endDate: payload.endDate,
+    requestedBusinessDays: bizDays,
+    employeeComment: payload.employeeComment,
+  });
+  if (!updated) throw new Error("Error al editar");
+  return updated;
 }
 
 export async function cancelRequest(requestId: string, userId: string): Promise<VacationRequest> {
@@ -178,10 +216,28 @@ export async function cancelRequest(requestId: string, userId: string): Promise<
   const req = db.findRequestById(requestId);
   if (!req) throw new Error("Solicitud no encontrada");
   if (req.userId !== userId) throw new Error("No autorizado");
-  if (req.status !== "PENDING") throw new Error("Solo se pueden cancelar solicitudes pendientes");
+  if (req.status !== "PENDING" && req.status !== "APPROVED") throw new Error("Solo se pueden cancelar solicitudes pendientes o aprobadas");
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (req.status === "APPROVED" && req.startDate <= today) {
+    throw new Error("No puedes cancelar vacaciones aprobadas que ya iniciaron o están en curso.");
+  }
 
   const updated = db.updateRequest(requestId, { status: "CANCELED" });
   if (!updated) throw new Error("Error al cancelar");
+
+  // Refund balance if was approved
+  if (req.status === "APPROVED") {
+    const year = new Date(req.startDate).getFullYear();
+    const balance = db.getBalance(userId, year);
+    if (balance) {
+      db.updateBalance(userId, year, {
+        availableDays: balance.availableDays + req.requestedBusinessDays,
+        usedDays: Math.max(0, balance.usedDays - req.requestedBusinessDays),
+      });
+    }
+  }
+
   return updated;
 }
 
@@ -734,4 +790,30 @@ export async function needsChangesReport(_id: string, _comment?: string): Promis
 
 export function exportReportUrl(_id: string): string {
   return "#";
+}
+
+// ── Conflict Analysis (mock) ──────────────────────────
+export async function analyzeConflict(_requestId: string): Promise<import("@/types").ConflictAnalysis> {
+  await delay(300);
+  return {
+    request_id: _requestId,
+    requester_name: "Empleado Mock",
+    risk_level: "LOW",
+    team_size: 5,
+    days_requested: 3,
+    daily_analysis: [],
+    overlapping_requests: [],
+    worst_day: null,
+    summary: "🟢 Sin conflictos significativos (mock).",
+  };
+}
+
+export async function suggestDates(_desiredDays: number, _searchMonths?: number): Promise<import("@/types").DateSuggestion[]> {
+  await delay(300);
+  return [];
+}
+
+export async function exportICS(_requestId: string): Promise<string> {
+  await delay(100);
+  return "BEGIN:VCALENDAR\nEND:VCALENDAR";
 }

@@ -26,6 +26,8 @@ export const api = {
   requests: {
     preValidate: impl.preValidateRequest,
     create: impl.createRequest,
+    edit: impl.editRequest,
+    get: impl.getRequest,
     listMine: impl.listMyRequests,
     cancel: impl.cancelRequest,
   },
@@ -86,6 +88,13 @@ export const api = {
     listReports: impl.listExpenseReports,
     getReport: impl.getExpenseReport,
     submitReport: impl.submitExpenseReport,
+  },
+  conflictAnalysis: {
+    analyze: impl.analyzeConflict,
+    suggestDates: impl.suggestDates,
+  },
+  calendarExport: {
+    exportICS: impl.exportICS,
   },
   finance: {
     listReports: impl.listFinanceReports,

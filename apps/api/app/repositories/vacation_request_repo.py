@@ -33,8 +33,23 @@ class VacationRequestRepository:
         )
         return list(self.db.execute(stmt).scalars().all())
 
-    def list_by_employee_paginated(self, employee_id: str, *, offset: int = 0, limit: int = 20) -> tuple[list[VacationRequest], int]:
+    def list_by_employee_paginated(
+        self,
+        employee_id: str,
+        *,
+        status: str | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[VacationRequest], int]:
         base = select(VacationRequest).where(VacationRequest.employee_id == employee_id)
+        if status:
+            base = base.where(VacationRequest.status == status)
+        if start_date:
+            base = base.where(VacationRequest.start_date >= start_date)
+        if end_date:
+            base = base.where(VacationRequest.end_date <= end_date)
         total = self._count(base)
         items = list(
             self.db.execute(
@@ -42,6 +57,19 @@ class VacationRequestRepository:
             ).scalars().all()
         )
         return items, total
+
+    def list_team_approved_in_range(self, team_id: str, start_date: date, end_date: date) -> list[VacationRequest]:
+        stmt = (
+            select(VacationRequest)
+            .where(
+                VacationRequest.team_id == team_id,
+                VacationRequest.status == VacationRequestStatus.APPROVED,
+                VacationRequest.start_date <= end_date,
+                VacationRequest.end_date >= start_date,
+            )
+            .order_by(VacationRequest.start_date.asc())
+        )
+        return list(self.db.execute(stmt).scalars().all())
 
     def count_team_occupied_on_day(self, team_id: str, target_day: date) -> int:
         stmt = select(func.count(VacationRequest.id)).where(
@@ -151,6 +179,19 @@ class VacationRequestRepository:
             ).scalars().all()
         )
         return items, total
+
+    def list_stale_pending(self, older_than_days: int = 3) -> list[VacationRequest]:
+        from datetime import datetime, timedelta, timezone
+        cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+        stmt = (
+            select(VacationRequest)
+            .where(
+                VacationRequest.status == VacationRequestStatus.PENDING,
+                VacationRequest.created_at <= cutoff,
+            )
+            .order_by(VacationRequest.created_at.asc())
+        )
+        return list(self.db.execute(stmt).scalars().all())
 
     def _count(self, base_stmt: Select) -> int:
         count_stmt = select(func.count()).select_from(base_stmt.subquery())

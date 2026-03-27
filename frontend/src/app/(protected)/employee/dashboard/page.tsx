@@ -14,7 +14,10 @@ import BalanceCard from "@/components/vacations/BalanceCard";
 import RequestForm from "@/components/vacations/RequestForm";
 import RequestsTable from "@/components/vacations/RequestsTable";
 import CancelDialog from "@/components/vacations/CancelDialog";
+import EditRequestModal from "@/components/vacations/EditRequestModal";
+import RequestDetailModal from "@/components/vacations/RequestDetailModal";
 import VacationCalendar from "@/components/calendar/VacationCalendar";
+import DateSuggestions from "@/components/vacations/DateSuggestions";
 import { useToast } from "@/components/ui/Toast";
 
 export default function EmployeeDashboardPage() {
@@ -25,6 +28,9 @@ export default function EmployeeDashboardPage() {
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<VacationRequest | null>(null);
+  const [editTarget, setEditTarget] = useState<VacationRequest | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [viewTarget, setViewTarget] = useState<VacationRequest | null>(null);
 
   const balanceQ = useQuery({
     queryKey: ["balance", user?.id, year],
@@ -33,9 +39,10 @@ export default function EmployeeDashboardPage() {
   });
 
   const requestsQ = useQuery({
-    queryKey: ["myRequests", user?.id],
+    queryKey: ["myRequests", user?.id, statusFilter],
     queryFn: async () => {
-      const res = await api.requests.listMine(user!.id);
+      const filters = statusFilter ? { status: statusFilter } : undefined;
+      const res = await api.requests.listMine(user!.id, undefined, filters);
       return res.items;
     },
     enabled: !!user,
@@ -56,6 +63,20 @@ export default function EmployeeDashboardPage() {
     },
     onError: (err) => {
       toast("error", err instanceof Error ? err.message : "Error al crear solicitud");
+    },
+  });
+
+  const editMut = useMutation({
+    mutationFn: ({ requestId, payload }: { requestId: string; payload: { startDate: string; endDate: string; employeeComment?: string } }) =>
+      api.requests.edit(requestId, user!.id, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["myRequests"] });
+      qc.invalidateQueries({ queryKey: ["balance"] });
+      setEditTarget(null);
+      toast("success", "Solicitud editada correctamente");
+    },
+    onError: (err) => {
+      toast("error", err instanceof Error ? err.message : "Error al editar solicitud");
     },
   });
 
@@ -117,20 +138,78 @@ export default function EmployeeDashboardPage() {
           </Card>
         )}
 
+        {/* AI Date Suggestions */}
+        <DateSuggestions
+          onSelectDates={(start, end) => {
+            setShowForm(true);
+          }}
+        />
+
         {/* Requests table */}
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Mis Solicitudes</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+            <h2 className="text-lg font-semibold text-gray-900">Mis Solicitudes</h2>
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              {[
+                { value: "", label: "Todas" },
+                { value: "PENDING", label: "Pendientes" },
+                { value: "APPROVED", label: "Aprobadas" },
+                { value: "REJECTED", label: "Rechazadas" },
+                { value: "CANCELLED", label: "Canceladas" },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setStatusFilter(opt.value)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    statusFilter === opt.value
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
           <RequestsTable
             data={requestsQ.data ?? []}
             isLoading={requestsQ.isLoading}
             showActions
+            onEdit={(req: VacationRequest) => setEditTarget(req)}
             onCancel={(req: VacationRequest) => setCancelTarget(req)}
+            onView={(req: VacationRequest) => setViewTarget(req)}
+            onExportICS={(req: VacationRequest) => {
+              api.calendarExport.exportICS(req.id).then(() => {
+                toast("success", "Archivo .ics descargado — ábrelo para agregar a tu calendario");
+              }).catch((e: Error) => {
+                toast("error", e.message || "Error al exportar calendario");
+              });
+            }}
             emptyMessage="No tienes solicitudes de vacaciones."
           />
         </div>
 
         {/* Calendar */}
         <VacationCalendar title="Calendario de Vacaciones" />
+
+        {/* Detail modal */}
+        <RequestDetailModal
+          open={!!viewTarget}
+          onClose={() => setViewTarget(null)}
+          request={viewTarget}
+          onToast={toast}
+        />
+
+        {/* Edit modal */}
+        <EditRequestModal
+          open={!!editTarget}
+          onClose={() => setEditTarget(null)}
+          request={editTarget}
+          onConfirm={async (id, payload) => {
+            await editMut.mutateAsync({ requestId: id, payload });
+          }}
+          loading={editMut.isPending}
+        />
 
         {/* Cancel dialog */}
         <CancelDialog
