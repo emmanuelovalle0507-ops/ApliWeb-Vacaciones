@@ -36,6 +36,7 @@ class User(Base):
         nullable=True,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    expenses_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     position: Mapped[str | None] = mapped_column(String(150), nullable=True)

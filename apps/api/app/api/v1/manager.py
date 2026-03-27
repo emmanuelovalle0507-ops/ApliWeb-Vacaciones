@@ -101,6 +101,23 @@ def list_team_history(
     )
 
 
+@router.patch("/team/members/{user_id}/expenses-toggle")
+def toggle_employee_expenses(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+) -> dict:
+    repo = UserRepository(db)
+    members = repo.list_by_manager_id(current_user.id)
+    target = next((m for m in members if str(m.id) == user_id), None)
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Empleado no encontrado en tu equipo.")
+    target.expenses_enabled = not target.expenses_enabled
+    db.commit()
+    db.refresh(target)
+    return {"id": str(target.id), "expenses_enabled": target.expenses_enabled}
+
+
 @router.get("/team/members", response_model=UserListOut)
 def list_team_members(
     db: Session = Depends(get_db),
@@ -118,6 +135,7 @@ def list_team_members(
                 team_id=str(u.team_id) if u.team_id else None,
                 manager_id=str(u.manager_id) if u.manager_id else None,
                 is_active=u.is_active,
+                expenses_enabled=u.expenses_enabled,
                 created_at=u.created_at,
             )
             for u in members

@@ -79,7 +79,7 @@ export default function ManagerExpensesPage() {
   const needsChanges = reports.filter((r) => r.status === "NEEDS_CHANGES").length;
 
   return (
-    <RoleGuard allowed={["MANAGER"]}>
+    <RoleGuard allowed={["MANAGER", "EMPLOYEE"]}>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">

@@ -44,6 +44,7 @@ def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_
         role=user.role.value,
         team_id=str(user.team_id) if user.team_id else None,
         team_name=team_name,
+        expenses_enabled=user.expenses_enabled,
     )
 
 
@@ -54,3 +55,12 @@ def require_roles(*allowed_roles: str) -> Callable:
         return current_user
 
     return _checker
+
+
+def require_expenses_access(current_user: UserSummary = Depends(get_current_user)) -> UserSummary:
+    """Allow MANAGER/ADMIN always; EMPLOYEE only when expenses_enabled; deny others."""
+    if current_user.role in ("MANAGER", "ADMIN"):
+        return current_user
+    if current_user.role == "EMPLOYEE" and current_user.expenses_enabled:
+        return current_user
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso al módulo de gastos.")

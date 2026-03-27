@@ -32,6 +32,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
 const NAV_CONFIG: Record<UserRole, NavItem[]> = {
   EMPLOYEE: [
     { label: "Mi Dashboard", href: "/employee/dashboard", icon: "LayoutDashboard" },
+    { label: "Gastos / Viáticos", href: "/employee/expenses", icon: "Receipt" },
     { label: "Mi Perfil", href: "/profile", icon: "UserCircle" },
   ],
   MANAGER: [
@@ -74,7 +75,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
 
   if (!user) return null;
 
-  const navItems = NAV_CONFIG[user.role] ?? [];
+  const navItems = (NAV_CONFIG[user.role] ?? []).filter((item) => {
+    if (item.href === "/employee/expenses" && !user.expensesEnabled) return false;
+    return true;
+  });
 
   return (
     <>

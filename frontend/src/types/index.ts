@@ -42,6 +42,7 @@ export interface User {
   managerId?: string;
   managerIds?: string[];
   isActive?: boolean;
+  expensesEnabled?: boolean;
   hireDate?: string;
   position?: string;
 }

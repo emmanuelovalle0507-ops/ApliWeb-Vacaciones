@@ -22,6 +22,7 @@ class UserSummary(BaseModel):
     role: str
     team_id: str | None = None
     team_name: str | None = None
+    expenses_enabled: bool = False
     must_change_password: bool = False
 
 

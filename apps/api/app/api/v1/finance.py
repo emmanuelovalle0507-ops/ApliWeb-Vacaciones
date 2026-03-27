@@ -12,7 +12,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func as sa_func
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_roles
+from app.api.deps import get_current_user, require_roles
+from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.expense_action import ExpenseAction
 from app.models.expense_receipt import ExpenseReceipt, ReceiptDecision
@@ -368,9 +369,28 @@ def reset_receipt_decisions(
 @router.get("/reports/{report_id}/export")
 def export_report(
     report_id: str,
+    token: str | None = Query(None),
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("FINANCE", "ADMIN")),
+    current_user: UserSummary | None = Depends(lambda: None),
 ) -> StreamingResponse:
+    # Accept token via query param (for browser downloads in new tab)
+    from app.repositories.user_repo import UserRepository as _UR
+    from app.repositories.team_repo import TeamRepository as _TR
+    if token:
+        try:
+            payload = decode_access_token(token)
+            uid = payload.get("sub")
+            if not uid:
+                raise HTTPException(status_code=401, detail="Invalid token")
+            u = _UR(db).get_by_id(uid)
+            if not u or not u.is_active:
+                raise HTTPException(status_code=401, detail="User not found")
+            if u.role.value not in ("FINANCE", "ADMIN"):
+                raise HTTPException(status_code=403, detail="Insufficient permissions")
+        except ValueError as exc:
+            raise HTTPException(status_code=401, detail="Invalid token") from exc
+    else:
+        raise HTTPException(status_code=401, detail="Token requerido para exportar.")
     repo = ExpenseReportRepository(db)
     report = repo.get_by_id(report_id)
     if not report:

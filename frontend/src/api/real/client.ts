@@ -35,6 +35,7 @@ type BackendUserSummary = {
   role: User["role"];
   team_id?: string | null;
   team_name?: string | null;
+  expenses_enabled?: boolean;
   must_change_password?: boolean;
 };
 
@@ -145,6 +146,7 @@ type BackendUserFull = {
   manager_id?: string | null;
   manager_ids?: string[];
   is_active: boolean;
+  expenses_enabled?: boolean;
   hire_date?: string | null;
   position?: string | null;
   created_at: string;
@@ -209,6 +211,7 @@ function mapUser(summary: BackendUserSummary, fallbackEmail = "usuario@vacacione
       id: summary.team_id ?? "no-team",
       name: teamName,
     },
+    expensesEnabled: summary.expenses_enabled ?? false,
   };
 }
 
@@ -467,6 +470,7 @@ function mapUserFull(u: BackendUserFull): User {
     managerId: u.manager_id ?? undefined,
     managerIds: u.manager_ids ?? [],
     isActive: u.is_active,
+    expensesEnabled: u.expenses_enabled ?? false,
     hireDate: u.hire_date ?? undefined,
     position: u.position ?? undefined,
   };
@@ -550,6 +554,12 @@ export async function listTeams(): Promise<{ id: string; name: string }[]> {
 export async function listTeamMembers(): Promise<User[]> {
   const result = await request<BackendUserListResponse>("/manager/team/members");
   return result.items.map(mapUserFull);
+}
+
+export async function toggleEmployeeExpenses(userId: string): Promise<{ id: string; expenses_enabled: boolean }> {
+  return request<{ id: string; expenses_enabled: boolean }>(`/manager/team/members/${userId}/expenses-toggle`, {
+    method: "PATCH",
+  });
 }
 
 // ── Notifications ──────────────────────────────────────
@@ -1044,7 +1054,9 @@ export async function needsChangesReport(id: string, comment?: string): Promise<
 }
 
 export function exportReportUrl(id: string): string {
-  return `${BASE_URL}/finance/reports/${id}/export`;
+  const token = getToken();
+  const base = `${BASE_URL}/finance/reports/${id}/export`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }
 
 export async function markReportPaid(id: string, file?: File): Promise<ExpenseReport> {

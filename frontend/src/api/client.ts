@@ -54,6 +54,7 @@ export const api = {
   manager: {
     teamMembers: impl.listTeamMembers,
     teamHistory: impl.listTeamHistory,
+    toggleEmployeeExpenses: impl.toggleEmployeeExpenses,
   },
   notifications: {
     listMine: impl.listMyNotifications,

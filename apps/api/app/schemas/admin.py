@@ -15,6 +15,7 @@ class UserOut(BaseModel):
     manager_id: str | None = None
     manager_ids: list[str] = Field(default_factory=list)
     is_active: bool
+    expenses_enabled: bool = False
     hire_date: date | None = None
     position: str | None = None
     created_at: datetime

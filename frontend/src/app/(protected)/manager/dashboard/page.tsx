@@ -2,10 +2,10 @@
 
 import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ClipboardList, Users, CheckCircle, Palmtree, CalendarCheck, History, AlertTriangle } from "lucide-react";
+import { ClipboardList, Users, CheckCircle, Palmtree, CalendarCheck, History, AlertTriangle, Receipt, Loader2 } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import api from "@/api/client";
-import type { VacationRequest, CalendarEvent } from "@/types";
+import type { VacationRequest, CalendarEvent, User } from "@/types";
 import RoleGuard from "@/components/layout/RoleGuard";
 import Card, { CardBody } from "@/components/ui/Card";
 import Tabs from "@/components/ui/Tabs";
@@ -197,6 +197,11 @@ export default function ManagerDashboardPage() {
       ),
     },
     {
+      id: "team",
+      label: `Equipo (${teamCount})`,
+      content: <TeamMembersPanel members={teamMembersQ.data ?? []} isLoading={teamMembersQ.isLoading} />,
+    },
+    {
       id: "calendar",
       label: "Calendario",
       content: <VacationCalendar title="Calendario del Equipo" />,
@@ -281,5 +286,92 @@ export default function ManagerDashboardPage() {
         <Tabs tabs={tabs} defaultTab="requests" />
       </div>
     </RoleGuard>
+  );
+}
+
+/* ── Team Members Panel with Expenses Toggle ──────────────── */
+function TeamMembersPanel({ members, isLoading }: { members: User[]; isLoading: boolean }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const toggleMut = useMutation({
+    mutationFn: (userId: string) => api.manager.toggleEmployeeExpenses(userId),
+    onSuccess: (_data, userId) => {
+      qc.invalidateQueries({ queryKey: ["manager.teamMembers"] });
+      const member = members.find((m) => m.id === userId);
+      const newState = !member?.expensesEnabled;
+      toast("success", newState ? "Módulo de gastos activado." : "Módulo de gastos desactivado.");
+      setTogglingId(null);
+    },
+    onError: (err) => {
+      toast("error", err instanceof Error ? err.message : "Error al cambiar acceso.");
+      setTogglingId(null);
+    },
+  });
+
+  const handleToggle = (userId: string) => {
+    setTogglingId(userId);
+    toggleMut.mutate(userId);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-gray-400">
+        <Loader2 size={24} className="animate-spin mr-2" /> Cargando equipo...
+      </div>
+    );
+  }
+
+  if (members.length === 0) {
+    return <p className="text-center py-12 text-gray-400 text-sm">No tienes miembros en tu equipo.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 mb-1">
+        <Users size={18} className="text-gray-500" />
+        <h3 className="text-sm font-semibold text-gray-700">Miembros del equipo</h3>
+      </div>
+      <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+        {members.map((m) => (
+          <div key={m.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-full bg-seekop-100 text-seekop-700 flex items-center justify-center text-sm font-bold shrink-0">
+                {m.fullName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">{m.fullName}</p>
+                <p className="text-xs text-gray-400 truncate">{m.email} · {m.position || m.role}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <Receipt size={14} className={m.expensesEnabled ? "text-emerald-500" : "text-gray-300"} />
+                <span className={`text-xs font-medium ${m.expensesEnabled ? "text-emerald-600" : "text-gray-400"}`}>
+                  {m.expensesEnabled ? "Gastos activo" : "Gastos inactivo"}
+                </span>
+              </div>
+              <button
+                onClick={() => handleToggle(m.id)}
+                disabled={togglingId === m.id}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-seekop-500 focus:ring-offset-1 ${
+                  m.expensesEnabled ? "bg-emerald-500" : "bg-gray-300"
+                } ${togglingId === m.id ? "opacity-50" : ""}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${
+                    m.expensesEnabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-gray-400 mt-2">
+        Activa el módulo de gastos para que tus empleados puedan subir tickets, facturas y enviar reportes a Finanzas.
+      </p>
+    </div>
   );
 }

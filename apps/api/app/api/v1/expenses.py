@@ -9,7 +9,7 @@ from decimal import Decimal
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_current_user, require_expenses_access, require_roles
 from app.db.session import get_db
 from app.models.expense_receipt import ExpenseReceipt, ExtractionStatus
 from app.models.expense_report import ExpenseReport, ExpenseReportStatus
@@ -181,7 +181,7 @@ async def upload_receipts(
     files: list[UploadFile] = File(...),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+    current_user: UserSummary = Depends(require_expenses_access),
 ):
     if not files:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se proporcionaron archivos.")
@@ -310,7 +310,7 @@ def list_my_receipts(
     report_id: str | None = Query(None),
     unassigned: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+    current_user: UserSummary = Depends(require_expenses_access),
     pagination: PaginationParams = Depends(),
 ) -> PaginatedReceiptList:
     repo = ExpenseReceiptRepository(db)
@@ -401,7 +401,7 @@ def update_receipt(
 def create_report(
     payload: ReportCreateIn,
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+    current_user: UserSummary = Depends(require_expenses_access),
 ) -> ReportOut:
     user = UserRepository(db).get_by_id(current_user.id)
     report = ExpenseReport(
@@ -458,7 +458,7 @@ def create_report(
 def list_my_reports(
     report_status: str | None = Query(None, alias="status"),
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+    current_user: UserSummary = Depends(require_expenses_access),
     pagination: PaginationParams = Depends(),
 ) -> PaginatedReportList:
     repo = ExpenseReportRepository(db)
@@ -604,7 +604,7 @@ def serve_file(
 def create_manual_receipt(
     payload: ManualReceiptIn,
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+    current_user: UserSummary = Depends(require_expenses_access),
 ) -> ReceiptOut:
     from app.models.expense_receipt import ExpenseCategory
 
@@ -652,13 +652,13 @@ def create_manual_receipt(
 def delete_receipt(
     receipt_id: str,
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+    current_user: UserSummary = Depends(require_expenses_access),
 ):
     repo = ExpenseReceiptRepository(db)
     receipt = repo.get_by_id(receipt_id)
     if not receipt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket no encontrado.")
-    if current_user.role == "MANAGER" and str(receipt.owner_id) != current_user.id:
+    if current_user.role in ("MANAGER", "EMPLOYEE") and str(receipt.owner_id) != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a este ticket.")
     if receipt.report_id is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No se puede eliminar un ticket asignado a un reporte.")
@@ -678,13 +678,13 @@ def re_extract_receipt(
     receipt_id: str,
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("MANAGER", "ADMIN")),
+    current_user: UserSummary = Depends(require_expenses_access),
 ) -> ReceiptOut:
     repo = ExpenseReceiptRepository(db)
     receipt = repo.get_by_id(receipt_id)
     if not receipt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket no encontrado.")
-    if current_user.role == "MANAGER" and str(receipt.owner_id) != current_user.id:
+    if current_user.role in ("MANAGER", "EMPLOYEE") and str(receipt.owner_id) != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a este ticket.")
     if receipt.file_url == "manual":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No se puede re-extraer un ticket manual.")
