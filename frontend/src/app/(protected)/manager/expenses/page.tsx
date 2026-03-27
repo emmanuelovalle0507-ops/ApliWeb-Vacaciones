@@ -26,6 +26,13 @@ const EXTRACTION_STATUS: Record<string, { label: string; color: string; icon: Re
   FAILED: { label: "Error IA", color: "bg-red-100 text-red-700", icon: <XCircle size={14} /> },
 };
 
+const DUPLICATE_STATUS = { label: "Duplicado", color: "bg-orange-100 text-orange-700", icon: <XCircle size={14} /> };
+
+function resolveStatus(receipt: ExpenseReceipt) {
+  if (receipt.extractionStatus === "FAILED" && receipt.extractionJson?.error === "duplicate") return DUPLICATE_STATUS;
+  return EXTRACTION_STATUS[receipt.extractionStatus] ?? EXTRACTION_STATUS.PENDING;
+}
+
 const REPORT_STATUS: Record<string, { label: string; color: string }> = {
   DRAFT: { label: "Borrador", color: "bg-gray-100 text-gray-700 border-gray-200" },
   SUBMITTED: { label: "Enviado", color: "bg-blue-50 text-blue-700 border-blue-200" },
@@ -398,10 +405,11 @@ function ManualEntryForm({ onDone, onCancel }: { onDone: () => void; onCancel: (
 
 /* ── Ticket Row ──────────────────────────────────────── */
 function TicketRow({ receipt, onView, onDelete, onReExtract }: { receipt: ExpenseReceipt; onView: () => void; onDelete: () => void; onReExtract: () => void }) {
-  const st = EXTRACTION_STATUS[receipt.extractionStatus] ?? EXTRACTION_STATUS.PENDING;
+  const st = resolveStatus(receipt);
+  const isDuplicate = receipt.extractionStatus === "FAILED" && receipt.extractionJson?.error === "duplicate";
   const isManual = receipt.fileContentType === "application/manual";
   const canDelete = !receipt.reportId;
-  const canReExtract = !isManual && (receipt.extractionStatus === "FAILED" || receipt.extractionStatus === "DONE");
+  const canReExtract = !isDuplicate && !isManual && (receipt.extractionStatus === "FAILED" || receipt.extractionStatus === "DONE");
 
   return (
     <div className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors group">
@@ -523,7 +531,7 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ExpenseReceipt; onC
             </div>
             <div className="flex items-center gap-3 mt-1">
               {(() => {
-                const st = EXTRACTION_STATUS[receipt.extractionStatus] ?? EXTRACTION_STATUS.PENDING;
+                const st = resolveStatus(receipt);
                 return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${st.color}`}>{st.icon} {st.label}</span>;
               })()}
               {confidence != null && (
