@@ -123,7 +123,7 @@ class LLMService:
                 {"role": "user", "content": user_content},
             ],
             "temperature": temperature,
-            "max_tokens": 4000,
+            "max_tokens": 8000,
         }
         body = json.dumps(payload).encode("utf-8")
 
@@ -139,16 +139,19 @@ class LLMService:
                 method="POST",
             )
             try:
-                with request.urlopen(req, timeout=60) as resp:
+                with request.urlopen(req, timeout=90) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                 choices = data.get("choices", [])
                 if not choices:
                     last_error = ValueError("Empty choices")
                     continue
+                finish_reason = choices[0].get("finish_reason", "")
                 content = choices[0].get("message", {}).get("content")
                 if not content:
                     last_error = ValueError("Empty content")
                     continue
+                if finish_reason == "length":
+                    logger.warning("Vision response truncated (hit max_tokens), attempt %d/%d", attempt, retries)
                 return LLMResult(text=str(content).strip())
             except error.HTTPError as exc:
                 err_body = exc.read().decode("utf-8", errors="replace")[:500] if exc.fp else ""
@@ -225,6 +228,13 @@ class LLMService:
         if not result:
             return None
         text = result.text.strip()
+
+        # Detect content-policy refusals (model says it can't help)
+        refusal_hints = ("no puedo", "i can't", "i cannot", "unable to", "sorry")
+        if not text.startswith("{") and any(h in text.lower() for h in refusal_hints):
+            logger.warning("Vision model refused to process image: %s", text[:200])
+            return {"error": "refusal", "message": "El modelo de IA no pudo procesar esta imagen. Intenta con otra foto más clara."}
+
         # Strip markdown code fences if present
         if text.startswith("```"):
             text = text.split("\n", 1)[-1]
@@ -234,11 +244,41 @@ class LLMService:
         try:
             parsed = json.loads(text)
         except json.JSONDecodeError:
-            logger.error("Vision returned invalid JSON: %s", text[:300])
-            return None
+            # Attempt to repair truncated JSON
+            parsed = self._try_repair_json(text)
+            if parsed is None:
+                logger.error("Vision returned invalid JSON: %s", text[:300])
+                return None
+            logger.info("Repaired truncated JSON from vision response")
         if not isinstance(parsed, dict):
             return None
         return parsed
+
+    @staticmethod
+    def _try_repair_json(text: str) -> dict | None:
+        """Attempt to repair truncated JSON by closing open brackets/braces."""
+        if not text or not text.lstrip().startswith("{"):
+            return None
+        # Try progressively adding closing characters
+        closers = []
+        for ch in text:
+            if ch in ('{', '['):
+                closers.append('}' if ch == '{' else ']')
+            elif ch in ('}', ']'):
+                if closers:
+                    closers.pop()
+        # Also handle truncation mid-string value
+        candidates = [text]
+        # If we're inside a string, try closing it
+        if text.count('"') % 2 == 1:
+            candidates = [text + '"']
+        for candidate in candidates:
+            for suffix in ['', ''.join(reversed(closers)), 'null' + ''.join(reversed(closers))]:
+                try:
+                    return json.loads(candidate + suffix)
+                except json.JSONDecodeError:
+                    continue
+        return None
 
     def answer_domain_question(self, question: str, scope: str, context: str, domain_hint: str) -> str | None:
         system = (

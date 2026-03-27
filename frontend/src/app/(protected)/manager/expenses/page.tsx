@@ -623,6 +623,14 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ExpenseReceipt; onC
                       <p className="text-xs text-red-500 mt-1">{String(receipt.extractionJson?.message || "Este ticket ya fue subido anteriormente.")}</p>
                       <p className="text-xs text-gray-400 mt-2">Puedes eliminar este ticket duplicado.</p>
                     </>
+                  ) : receipt.extractionJson?.error === "refusal" ? (
+                    <>
+                      <p className="text-sm text-red-600 font-semibold">No se pudo procesar la imagen</p>
+                      <p className="text-xs text-red-500 mt-1">{String(receipt.extractionJson?.message || "Intenta con otra foto más clara.")}</p>
+                      <button onClick={() => setEditing(true)} className="mt-3 inline-flex items-center gap-1 text-sm text-seekop-600 hover:underline font-medium">
+                        <PenLine size={13} /> Llenar manualmente
+                      </button>
+                    </>
                   ) : (
                     <>
                       <p className="text-sm text-red-600">La extracción falló.</p>

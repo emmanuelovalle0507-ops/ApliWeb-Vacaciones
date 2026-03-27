@@ -75,6 +75,14 @@ class ReceiptExtractionService:
                 logger.warning("AI extraction failed for receipt %s (no result)", receipt_id)
                 return False
 
+            # 3b. Handle AI refusal or error responses
+            if result.get("error") in ("refusal",):
+                receipt.extraction_status = ExtractionStatus.FAILED
+                receipt.extraction_json = result
+                self.db.flush()
+                logger.warning("AI refused to process receipt %s: %s", receipt_id, result.get("message"))
+                return False
+
             # 4. Persist raw extraction
             receipt.extraction_json = result
             receipt.ocr_text = result.get("raw_text")
