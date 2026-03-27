@@ -806,7 +806,7 @@ function ReportsTab({ onViewReceipt }: { onViewReceipt: (r: ExpenseReceipt) => v
   });
 
   const reports = reportsData?.items ?? [];
-  const unassignedReceipts = unassignedData?.items ?? [];
+  const unassignedReceipts = (unassignedData?.items ?? []).filter((r) => r.extractionStatus !== "FAILED");
 
   const submitMutation = useMutation({
     mutationFn: (id: string) => api.expenses.submitReport(id),
@@ -1081,7 +1081,8 @@ function CreateReportForm({ unassignedReceipts, onCancel, onCreated }: {
   };
 
   const selectAll = () => {
-    setSelectedIds(selectedIds.size === unassignedReceipts.length ? new Set() : new Set(unassignedReceipts.map((r) => r.id)));
+    const validReceipts = unassignedReceipts.filter((r) => r.extractionStatus !== "FAILED");
+    setSelectedIds(selectedIds.size === validReceipts.length ? new Set() : new Set(validReceipts.map((r) => r.id)));
   };
 
   const selectedTotal = unassignedReceipts.filter((r) => selectedIds.has(r.id)).reduce((sum, r) => sum + (r.totalAmount ?? 0), 0);

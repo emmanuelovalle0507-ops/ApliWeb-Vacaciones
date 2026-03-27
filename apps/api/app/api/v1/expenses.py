@@ -484,6 +484,17 @@ def create_report(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"El ticket '{r.vendor_name or r.file_name}' ya está asignado a otro reporte.",
                 )
+            if r.extraction_status == ExtractionStatus.FAILED:
+                ej = r.extraction_json or {}
+                if ej.get("error") == "duplicate":
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"El ticket '{r.vendor_name or r.file_name}' es un duplicado y no puede incluirse en un reporte.",
+                    )
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"El ticket '{r.vendor_name or r.file_name}' tiene error de extracción y no puede incluirse en un reporte.",
+                )
             r.report_id = report.id
             if r.total_amount:
                 total += Decimal(str(r.total_amount))
@@ -571,7 +582,7 @@ def update_report(
 def submit_report(
     report_id: str,
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("MANAGER")),
+    current_user: UserSummary = Depends(require_expenses_access),
 ) -> ReportOut:
     repo = ExpenseReportRepository(db)
     report = repo.get_by_id(report_id)
@@ -581,6 +592,20 @@ def submit_report(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a este reporte.")
     if report.status not in (ExpenseReportStatus.DRAFT, ExpenseReportStatus.NEEDS_CHANGES):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Este reporte no puede ser enviado.")
+
+    # Block submission if any receipt is FAILED (e.g. duplicate detected after draft creation)
+    for rc in (report.receipts or []):
+        if rc.extraction_status == ExtractionStatus.FAILED:
+            ej = rc.extraction_json or {}
+            if ej.get("error") == "duplicate":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"El ticket '{rc.vendor_name or rc.file_name}' es un duplicado. Elimínalo del reporte antes de enviarlo.",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"El ticket '{rc.vendor_name or rc.file_name}' tiene error de extracción. Elimínalo o corrígelo antes de enviar.",
+            )
 
     # Recalculate total from receipts (may have been edited during NEEDS_CHANGES)
     total = Decimal("0")
