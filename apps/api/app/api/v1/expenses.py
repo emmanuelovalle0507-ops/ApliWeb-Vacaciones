@@ -10,6 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Qu
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_expenses_access, require_roles
+from app.services.receipt_fingerprint import compute_content_hash
 from app.db.session import get_db
 from app.models.expense_receipt import ExpenseReceipt, ExtractionStatus
 from app.models.expense_report import ExpenseReport, ExpenseReportStatus
@@ -279,6 +280,28 @@ async def upload_receipts(
                 "conceptos": cfdi.conceptos,
             }
 
+            # Duplicate detection for CFDI receipts
+            c_hash = compute_content_hash(
+                vendor_name=receipt.vendor_name,
+                receipt_date=receipt.receipt_date,
+                total_amount=receipt.total_amount,
+                currency=receipt.currency,
+                tax_amount=receipt.tax_amount,
+                uuid_fiscal=receipt.uuid_fiscal,
+                rfc_emisor=receipt.rfc_emisor,
+                line_items=receipt.line_items,
+            )
+            if c_hash:
+                dup = db.query(ExpenseReceipt).filter(
+                    ExpenseReceipt.content_hash == c_hash
+                ).first()
+                if dup:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=f"Este ticket ya fue subido anteriormente (duplicado de ticket #{str(dup.id)[:8]}).",
+                    )
+                receipt.content_hash = c_hash
+
         receipt = repo.add(receipt)
 
         audit.log(
@@ -350,13 +373,13 @@ def update_receipt(
     receipt_id: str,
     payload: ReceiptUpdateIn,
     db: Session = Depends(get_db),
-    current_user: UserSummary = Depends(require_roles("MANAGER")),
+    current_user: UserSummary = Depends(require_expenses_access),
 ) -> ReceiptOut:
     repo = ExpenseReceiptRepository(db)
     receipt = repo.get_by_id(receipt_id)
     if not receipt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket no encontrado.")
-    if str(receipt.owner_id) != current_user.id:
+    if current_user.role in ("MANAGER", "EMPLOYEE") and str(receipt.owner_id) != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No tienes acceso a este ticket.")
 
     # Block editing if the receipt belongs to an APPROVED or REJECTED report
@@ -383,6 +406,31 @@ def update_receipt(
             category=changes.get("category"),
             description=changes.get("description"),
         )
+
+        # Recompute content_hash after edit
+        db.flush()
+        receipt = repo.get_by_id(receipt_id)
+        new_hash = compute_content_hash(
+            vendor_name=receipt.vendor_name,
+            receipt_date=receipt.receipt_date,
+            total_amount=receipt.total_amount,
+            currency=receipt.currency,
+            tax_amount=receipt.tax_amount,
+            uuid_fiscal=receipt.uuid_fiscal,
+            rfc_emisor=receipt.rfc_emisor,
+            line_items=receipt.line_items,
+        )
+        if new_hash:
+            dup = db.query(ExpenseReceipt).filter(
+                ExpenseReceipt.content_hash == new_hash, ExpenseReceipt.id != receipt.id
+            ).first()
+            if dup:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Los datos editados coinciden con un ticket existente (#{str(dup.id)[:8]}).",
+                )
+            receipt.content_hash = new_hash
+
         AuditRepository(db).log(
             actor_user_id=current_user.id,
             action="RECEIPT_CORRECTED",
@@ -632,6 +680,24 @@ def create_manual_receipt(
         category=category_enum,
         description=payload.description,
     )
+
+    # Duplicate detection for manual receipts
+    c_hash = compute_content_hash(
+        vendor_name=receipt.vendor_name,
+        receipt_date=receipt.receipt_date,
+        total_amount=receipt.total_amount,
+        currency=receipt.currency,
+        tax_amount=receipt.tax_amount,
+    )
+    if c_hash:
+        dup = db.query(ExpenseReceipt).filter(ExpenseReceipt.content_hash == c_hash).first()
+        if dup:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Este ticket ya fue subido anteriormente (duplicado de ticket #{str(dup.id)[:8]}).",
+            )
+        receipt.content_hash = c_hash
+
     repo = ExpenseReceiptRepository(db)
     receipt = repo.add(receipt)
 

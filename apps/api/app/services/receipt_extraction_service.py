@@ -13,6 +13,7 @@ from app.models.expense_receipt import ExtractionStatus, ExpenseCategory
 from app.repositories.audit_repo import AuditRepository
 from app.repositories.expense_receipt_repo import ExpenseReceiptRepository
 from app.services.llm_service import LLMService
+from app.services.receipt_fingerprint import compute_content_hash
 from app.services.storage_service import StorageService
 
 logger = logging.getLogger(__name__)
@@ -111,6 +112,41 @@ class ReceiptExtractionService:
                 receipt.rfc_receptor = ai_rfc_receptor.upper() if ai_rfc_receptor else None
 
             receipt.extraction_status = ExtractionStatus.DONE
+
+            # 5b. Compute content fingerprint for duplicate detection
+            content_hash = compute_content_hash(
+                vendor_name=receipt.vendor_name,
+                receipt_date=receipt.receipt_date,
+                total_amount=receipt.total_amount,
+                currency=receipt.currency,
+                tax_amount=receipt.tax_amount,
+                uuid_fiscal=receipt.uuid_fiscal,
+                rfc_emisor=receipt.rfc_emisor,
+                line_items=receipt.line_items,
+            )
+            if content_hash:
+                from app.models.expense_receipt import ExpenseReceipt as _ER
+                existing = (
+                    self.db.query(_ER)
+                    .filter(_ER.content_hash == content_hash, _ER.id != receipt.id)
+                    .first()
+                )
+                if existing:
+                    receipt.extraction_status = ExtractionStatus.FAILED
+                    receipt.extraction_json = {
+                        "error": "duplicate",
+                        "duplicate_of": str(existing.id),
+                        "duplicate_owner": str(existing.owner_id),
+                        "message": "Este ticket ya fue subido anteriormente.",
+                    }
+                    self.db.flush()
+                    logger.warning(
+                        "Receipt %s is duplicate of %s (hash=%s)",
+                        receipt_id, existing.id, content_hash[:12],
+                    )
+                    return False
+                receipt.content_hash = content_hash
+
             self.db.flush()
 
             # 6. Audit

@@ -617,10 +617,20 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ExpenseReceipt; onC
               ) : receipt.extractionStatus === "FAILED" && !editing ? (
                 <div className="py-8 text-center">
                   <XCircle size={32} className="mx-auto text-red-300 mb-2" />
-                  <p className="text-sm text-red-600">La extracción falló.</p>
-                  <button onClick={() => setEditing(true)} className="mt-3 inline-flex items-center gap-1 text-sm text-seekop-600 hover:underline font-medium">
-                    <PenLine size={13} /> Llenar manualmente
-                  </button>
+                  {receipt.extractionJson?.error === "duplicate" ? (
+                    <>
+                      <p className="text-sm text-red-600 font-semibold">Ticket duplicado</p>
+                      <p className="text-xs text-red-500 mt-1">{String(receipt.extractionJson?.message || "Este ticket ya fue subido anteriormente.")}</p>
+                      <p className="text-xs text-gray-400 mt-2">Puedes eliminar este ticket duplicado.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm text-red-600">La extracción falló.</p>
+                      <button onClick={() => setEditing(true)} className="mt-3 inline-flex items-center gap-1 text-sm text-seekop-600 hover:underline font-medium">
+                        <PenLine size={13} /> Llenar manualmente
+                      </button>
+                    </>
+                  )}
                 </div>
               ) : null}
 

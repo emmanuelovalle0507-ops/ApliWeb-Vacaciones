@@ -76,6 +76,9 @@ class ExpenseReceipt(Base):
     # Line items extracted from receipt (each item with description, qty, unit_price, amount)
     line_items: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
 
+    # Duplicate-detection fingerprint (SHA-256 of normalized extracted fields)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+
     # CFDI fields
     is_cfdi: Mapped[bool] = mapped_column(default=False, nullable=False, server_default="false")
     uuid_fiscal: Mapped[str | None] = mapped_column(String(36), nullable=True, unique=True)
