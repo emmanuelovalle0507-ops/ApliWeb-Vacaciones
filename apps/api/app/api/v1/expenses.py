@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid as _uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -206,6 +207,15 @@ async def upload_receipts(
         except ValueError as exc:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+        # ── File-level duplicate detection (identical bytes) ──
+        file_hash = hashlib.sha256(data).hexdigest()
+        dup = db.query(ExpenseReceipt).filter(ExpenseReceipt.file_hash == file_hash).first()
+        if dup:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Este archivo ya fue subido anteriormente (duplicado de ticket #{str(dup.id)[:8]}).",
+            )
+
         key = _storage.save(data, current_user.id, f.filename or "file", content_type)
 
         is_xml = content_type in ("text/xml", "application/xml") or (
@@ -219,6 +229,7 @@ async def upload_receipts(
             file_name=f.filename or "file",
             file_content_type=content_type,
             file_size_bytes=len(data),
+            file_hash=file_hash,
             extraction_status=ExtractionStatus.PENDING,
         )
 
