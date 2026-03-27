@@ -32,6 +32,7 @@ class AuthService:
                 role=user.role.value,
                 team_id=str(user.team_id) if user.team_id else None,
                 team_name=team_name,
+                expenses_enabled=user.expenses_enabled,
                 must_change_password=user.must_change_password,
             ),
         )
@@ -52,6 +53,7 @@ class AuthService:
             role=user.role.value,
             team_id=str(user.team_id) if user.team_id else None,
             team_name=team_name,
+            expenses_enabled=user.expenses_enabled,
             must_change_password=user.must_change_password,
         )
 
