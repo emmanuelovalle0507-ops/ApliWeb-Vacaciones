@@ -89,6 +89,11 @@ export const api = {
     getReport: impl.getExpenseReport,
     submitReport: impl.submitExpenseReport,
   },
+  profile: {
+    get: impl.getMyProfile,
+    update: impl.updateMyProfile,
+    teamInfo: impl.getMyTeamInfo,
+  },
   conflictAnalysis: {
     analyze: impl.analyzeConflict,
     suggestDates: impl.suggestDates,

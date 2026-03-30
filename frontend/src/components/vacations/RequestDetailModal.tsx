@@ -1,15 +1,13 @@
 "use client";
 
 import React from "react";
-import { Calendar, User, MessageSquare, Hash, Download } from "lucide-react";
+import { Calendar, User, MessageSquare, Hash, ExternalLink } from "lucide-react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/Badge";
 import RequestTimeline from "@/components/vacations/RequestTimeline";
 import type { VacationRequest } from "@/types";
 import { formatDate } from "@/lib/format";
-import { api } from "@/api/client";
-
 interface RequestDetailModalProps {
   open: boolean;
   onClose: () => void;
@@ -17,18 +15,25 @@ interface RequestDetailModalProps {
   onToast?: (type: "success" | "error", msg: string) => void;
 }
 
+function buildGoogleCalendarUrl(req: VacationRequest): string {
+  const title = encodeURIComponent(`Vacaciones - ${req.employeeName}`);
+  const startDate = req.startDate.replace(/-/g, "");
+  const endRaw = new Date(req.endDate + "T00:00:00");
+  endRaw.setDate(endRaw.getDate() + 1);
+  const endDate = endRaw.toISOString().slice(0, 10).replace(/-/g, "");
+  const details = encodeURIComponent(
+    `Solicitud de vacaciones aprobada.\nDías hábiles: ${req.requestedBusinessDays}${
+      req.employeeComment ? `\nComentario: ${req.employeeComment}` : ""
+    }`
+  );
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}`;
+}
+
 export default function RequestDetailModal({
   open,
   onClose,
   request,
-  onToast,
 }: RequestDetailModalProps) {
-  const handleExportICS = () => {
-    if (!request) return;
-    api.calendarExport.exportICS(request.id)
-      .then(() => onToast?.("success", "Archivo .ics descargado"))
-      .catch((e: Error) => onToast?.("error", e.message || "Error al exportar"));
-  };
   if (!request) return null;
 
   return (
@@ -78,13 +83,19 @@ export default function RequestDetailModal({
           )}
         </div>
 
-        {/* Export to calendar */}
+        {/* Export to Google Calendar */}
         {request.status === "APPROVED" && (
           <div className="flex justify-center">
-            <Button variant="secondary" onClick={handleExportICS} className="gap-2">
-              <Download size={16} />
-              Agregar a Google Calendar / Outlook
-            </Button>
+            <a
+              href={buildGoogleCalendarUrl(request)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button variant="secondary" className="gap-2">
+                <ExternalLink size={16} />
+                Agregar a Google Calendar
+              </Button>
+            </a>
           </div>
         )}
 

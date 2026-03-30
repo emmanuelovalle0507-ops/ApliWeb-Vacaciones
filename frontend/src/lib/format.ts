@@ -1,9 +1,9 @@
 import { ROLE_LABELS, STATUS_LABELS } from "@/types";
 import type { UserRole, RequestStatus } from "@/types";
 
-/** Format YYYY-MM-DD to locale readable date */
+/** Format YYYY-MM-DD or full ISO datetime to locale readable date */
 export function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
+  const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T00:00:00");
   return d.toLocaleDateString("es-MX", {
     year: "numeric",
     month: "short",

@@ -24,6 +24,9 @@ import type {
   UserCreatePayload,
   UserUpdatePayload,
   AuditLogEntry,
+  ConflictAnalysis,
+  DateSuggestionsResponse,
+  TeamInfo,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api/v1";
@@ -1085,13 +1088,26 @@ export function paymentProofUrl(id: string): string {
   return `${BASE_URL}/finance/reports/${id}/payment-proof`;
 }
 
+// ── Profile ───────────────────────────────────────────
+export async function getMyProfile(): Promise<{ phone: string | null; emergency_contact: string | null }> {
+  return request<{ phone: string | null; emergency_contact: string | null }>("/auth/me/profile");
+}
+
+export async function updateMyProfile(data: { phone?: string | null; emergency_contact?: string | null }): Promise<{ phone: string | null; emergency_contact: string | null; message: string }> {
+  return request<{ phone: string | null; emergency_contact: string | null; message: string }>("/auth/me/profile", { method: "PATCH", body: JSON.stringify(data) });
+}
+
+export async function getMyTeamInfo(): Promise<TeamInfo> {
+  return request<TeamInfo>("/auth/me/team-info");
+}
+
 // ── Conflict Analysis ──────────────────────────────────
 export async function analyzeConflict(requestId: string): Promise<ConflictAnalysis> {
   return request<ConflictAnalysis>(`/conflict-analysis/request/${requestId}`);
 }
 
-export async function suggestDates(desiredDays: number, searchMonths: number = 3): Promise<DateSuggestion[]> {
-  return request<DateSuggestion[]>(`/conflict-analysis/suggest-dates?desired_days=${desiredDays}&search_months=${searchMonths}`);
+export async function suggestDates(desiredDays: number, searchMonths: number = 3): Promise<DateSuggestionsResponse> {
+  return request<DateSuggestionsResponse>(`/conflict-analysis/suggest-dates?desired_days=${desiredDays}&search_months=${searchMonths}`);
 }
 
 // ── Calendar Export (ICS) ──────────────────────────────

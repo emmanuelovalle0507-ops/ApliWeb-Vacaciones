@@ -263,6 +263,12 @@ export interface OverlappingRequest {
   days: number;
 }
 
+export interface AIRecommendation {
+  recommendation: string;
+  key_concerns: string[];
+  suggested_actions: string[];
+}
+
 export interface ConflictAnalysis {
   request_id: string;
   requester_name: string;
@@ -273,17 +279,61 @@ export interface ConflictAnalysis {
   overlapping_requests: OverlappingRequest[];
   worst_day: DailyConflict | null;
   summary: string;
+  ai_recommendation: AIRecommendation | null;
+  ai_powered: boolean;
 }
 
 export interface DateSuggestion {
   start_date: string;
   end_date: string;
   days: number;
-  max_team_occupancy: number;
-  avg_team_occupancy: number;
   min_coverage_pct: number;
+  max_coverage_pct: number;
+  avg_coverage_pct: number;
   exceeds_policy: boolean;
   has_bridge: boolean;
+  colleagues_off: string[];
+  notice_days: number;
+  ai_explanation?: string;
+  ai_score?: number;
+  ai_pros?: string[];
+  ai_cons?: string[];
+}
+
+export interface PolicyInfo {
+  min_notice_days: number;
+  max_people_off_per_day: number;
+  team_size: number;
+  earliest_allowed_date: string;
+}
+
+export interface DateSuggestionsResponse {
+  policy_info: PolicyInfo;
+  suggestions: DateSuggestion[];
+  ai_powered: boolean;
+}
+
+// ── Profile / Team Info ─────────────────────────────────
+export interface TeamMemberInfo {
+  id: string;
+  full_name: string;
+  email: string;
+  position: string | null;
+  role: string;
+}
+
+export interface VacationPersonInfo {
+  id: string;
+  full_name: string;
+  start_date: string;
+  end_date: string;
+}
+
+export interface TeamInfo {
+  manager: TeamMemberInfo | null;
+  team_members: TeamMemberInfo[];
+  on_vacation_now: VacationPersonInfo[];
+  upcoming_vacations: VacationPersonInfo[];
 }
 
 // ── Navigation ─────────────────────────────────────────

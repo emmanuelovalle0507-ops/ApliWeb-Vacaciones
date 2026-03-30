@@ -792,6 +792,26 @@ export function exportReportUrl(_id: string): string {
   return "#";
 }
 
+export async function decideReceipt(_reportId: string, _receiptId: string, _decision: string, _comment?: string): Promise<unknown> {
+  throw new Error("Mock: not implemented");
+}
+
+export async function finalizeReview(_reportId: string, _comment?: string): Promise<ExpenseReport> {
+  throw new Error("Mock: not implemented");
+}
+
+export async function resetReceiptDecisions(_reportId: string): Promise<ExpenseReport> {
+  throw new Error("Mock: not implemented");
+}
+
+export async function markReportPaid(_reportId: string, _file?: File): Promise<ExpenseReport> {
+  throw new Error("Mock: not implemented");
+}
+
+export function paymentProofUrl(_id: string): string {
+  return "#";
+}
+
 // ── Conflict Analysis (mock) ──────────────────────────
 export async function analyzeConflict(_requestId: string): Promise<import("@/types").ConflictAnalysis> {
   await delay(300);
@@ -805,15 +825,46 @@ export async function analyzeConflict(_requestId: string): Promise<import("@/typ
     overlapping_requests: [],
     worst_day: null,
     summary: "🟢 Sin conflictos significativos (mock).",
+    ai_recommendation: {
+      recommendation: "Se recomienda aprobar la solicitud. No hay conflictos con el equipo.",
+      key_concerns: [],
+      suggested_actions: [],
+    },
+    ai_powered: true,
   };
 }
 
-export async function suggestDates(_desiredDays: number, _searchMonths?: number): Promise<import("@/types").DateSuggestion[]> {
+export async function suggestDates(_desiredDays: number, _searchMonths?: number): Promise<import("@/types").DateSuggestionsResponse> {
   await delay(300);
-  return [];
+  return {
+    policy_info: {
+      min_notice_days: 10,
+      max_people_off_per_day: 2,
+      team_size: 5,
+      earliest_allowed_date: "2026-04-10",
+    },
+    suggestions: [],
+    ai_powered: false,
+  };
 }
 
 export async function exportICS(_requestId: string): Promise<string> {
   await delay(100);
   return "BEGIN:VCALENDAR\nEND:VCALENDAR";
+}
+
+// ── Profile ───────────────────────────────────────────
+export async function getMyProfile(): Promise<{ phone: string | null; emergency_contact: string | null }> {
+  await delay(200);
+  return { phone: null, emergency_contact: null };
+}
+
+export async function updateMyProfile(data: { phone?: string | null; emergency_contact?: string | null }): Promise<{ phone: string | null; emergency_contact: string | null; message: string }> {
+  await delay(300);
+  return { phone: data.phone ?? null, emergency_contact: data.emergency_contact ?? null, message: "Perfil actualizado correctamente." };
+}
+
+export async function getMyTeamInfo(): Promise<import("@/types").TeamInfo> {
+  await delay(300);
+  return { manager: null, team_members: [], on_vacation_now: [], upcoming_vacations: [] };
 }
