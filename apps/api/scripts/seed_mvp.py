@@ -230,6 +230,16 @@ def run() -> None:
                 manager_id=josue.id,
             )
 
+            josue_carlos = _ensure_user(
+                db,
+                email="josuecarlossalas1996@gmail.com",
+                full_name="Josue Carlos Salas",
+                role=UserRole.EMPLOYEE,
+                password_plain="Seekop2026!",
+                team_id=team_ia.id,
+                manager_id=josue.id,
+            )
+
             # ── EMPLEADOS — Marketing Digital (jefa: Daniela) ──
             sofia = _ensure_user(
                 db,
@@ -306,6 +316,7 @@ def run() -> None:
                 (ricardo_n, Decimal("15.00"), Decimal("4.00")),
                 (emmanuel, Decimal("15.00"), Decimal("2.00")),
                 (emmanuel_jira, Decimal("15.00"), Decimal("0.00")),
+                (josue_carlos, Decimal("15.00"), Decimal("0.00")),
                 (sofia, Decimal("15.00"), Decimal("6.00")),
                 (carlos, Decimal("15.00"), Decimal("0.00")),
                 (maria, Decimal("15.00"), Decimal("3.00")),

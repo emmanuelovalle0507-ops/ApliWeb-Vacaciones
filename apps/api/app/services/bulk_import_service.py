@@ -822,7 +822,7 @@ def process_import(
             if not team:
                 errs.append(f"Equipo '{raw_team}' no encontrado. Disponibles: {suggestion}")
 
-        # Resolver gerente por email (opcional)
+        # Resolver gerente por email (opcional) o auto-asignar por equipo
         manager_user: User | None = None
         if raw_mgr_email:
             manager_user = user_repo.get_by_email(raw_mgr_email)
@@ -830,6 +830,14 @@ def process_import(
                 errs.append(f"Gerente '{raw_mgr_email}' no encontrado en el sistema")
             elif manager_user.role.value not in ("MANAGER", "ADMIN"):
                 errs.append(f"'{raw_mgr_email}' no tiene rol de Gerente")
+        elif team and norm_role == "EMPLOYEE":
+            # Auto-asignar el manager del equipo si no se especificó gerente_email
+            team_managers = [
+                u for u in user_repo.list_all(role="MANAGER", team_id=str(team.id))
+                if u.is_active
+            ]
+            if team_managers:
+                manager_user = team_managers[0]
 
         if errs:
             entry["status"] = "ERROR"
@@ -844,7 +852,8 @@ def process_import(
             seen.add(raw_email.lower())
             created += 1
             entry["vacation_days"] = vac_days
-            entry["detail"] = f"Listo para importar — {vac_days} días de vacaciones"
+            mgr_note = f" (Gerente auto: {manager_user.full_name})" if manager_user and not raw_mgr_email else ""
+            entry["detail"] = f"Listo para importar — {vac_days} días de vacaciones{mgr_note}"
             results.append(entry)
             continue
 
@@ -887,7 +896,8 @@ def process_import(
             created += 1
             entry["password"] = pwd
             entry["vacation_days"] = vac_days
-            entry["detail"] = f"Creado correctamente — {vac_days} días de vacaciones"
+            mgr_note = f" | Gerente: {manager_user.full_name}" if manager_user else ""
+            entry["detail"] = f"Creado correctamente — {vac_days} días de vacaciones{mgr_note}"
 
         except Exception as exc:
             sp.rollback()
