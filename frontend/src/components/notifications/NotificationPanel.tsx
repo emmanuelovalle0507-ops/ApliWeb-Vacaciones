@@ -73,11 +73,14 @@ export default function NotificationPanel() {
   const panelRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
-  // Poll unread count every 30s
+  // Poll unread count every 30s (solo si hay token)
+  const hasToken = typeof window !== "undefined" && !!localStorage.getItem("vc_token");
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ["notifications", "unread-count"],
     queryFn: () => api.notifications.getUnreadCount(),
     refetchInterval: 30_000,
+    enabled: hasToken,
+    retry: false,
   });
 
   // Fetch full list only when panel is open
@@ -87,6 +90,7 @@ export default function NotificationPanel() {
       const res = await api.notifications.listMine("");
       return res.items;
     },
+    retry: false,
     enabled: open,
     refetchInterval: open ? 15_000 : false,
   });

@@ -1110,6 +1110,104 @@ export async function suggestDates(desiredDays: number, searchMonths: number = 3
   return request<DateSuggestionsResponse>(`/conflict-analysis/suggest-dates?desired_days=${desiredDays}&search_months=${searchMonths}`);
 }
 
+// ── Bulk Import ────────────────────────────────────────
+export async function downloadImportTemplate(): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}/admin/employees/import-template`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `Error ${res.status}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "plantilla_empleados.xlsx";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export type BulkImportResult = {
+  row: number;
+  name: string;
+  email: string;
+  role: string;
+  team: string;
+  manager?: string;
+  password?: string;
+  vacation_days?: number;
+  status: "CREADO" | "ERROR" | "WARNING" | "VÁLIDO";
+  detail: string;
+};
+
+export type BulkImportResponse = {
+  created: number;
+  errors: number;
+  total: number;
+  results: BulkImportResult[];
+  result_file_b64: string;
+  batch_id: string;
+};
+
+export type BulkPreviewResponse = {
+  valid: number;
+  errors: number;
+  total: number;
+  results: BulkImportResult[];
+};
+
+export type BulkRollbackResponse = {
+  rolled_back: number;
+  emails: string[];
+  detail: string;
+};
+
+export async function previewImport(file: File): Promise<BulkPreviewResponse> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/admin/employees/import-preview`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `Error ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function importEmployees(file: File): Promise<BulkImportResponse> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${BASE_URL}/admin/employees/import`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : `Error ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export async function rollbackImport(batchId: string): Promise<BulkRollbackResponse> {
+  return request<BulkRollbackResponse>(`/admin/employees/import-rollback/${batchId}`, { method: "POST" });
+}
+
 // ── Calendar Export (ICS) ──────────────────────────────
 export async function exportICS(requestId: string): Promise<string> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;

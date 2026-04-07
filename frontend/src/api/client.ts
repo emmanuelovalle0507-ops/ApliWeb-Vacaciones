@@ -101,6 +101,12 @@ export const api = {
   calendarExport: {
     exportICS: impl.exportICS,
   },
+  bulkImport: {
+    downloadTemplate: impl.downloadImportTemplate,
+    previewImport: impl.previewImport,
+    importEmployees: impl.importEmployees,
+    rollbackImport: impl.rollbackImport,
+  },
   finance: {
     listReports: impl.listFinanceReports,
     getReport: impl.getFinanceReport,

@@ -15,18 +15,18 @@ interface RequestDetailModalProps {
   onToast?: (type: "success" | "error", msg: string) => void;
 }
 
-function buildGoogleCalendarUrl(req: VacationRequest): string {
-  const title = encodeURIComponent(`Vacaciones - ${req.employeeName}`);
-  const startDate = req.startDate.replace(/-/g, "");
-  const endRaw = new Date(req.endDate + "T00:00:00");
-  endRaw.setDate(endRaw.getDate() + 1);
-  const endDate = endRaw.toISOString().slice(0, 10).replace(/-/g, "");
-  const details = encodeURIComponent(
-    `Solicitud de vacaciones aprobada.\nDías hábiles: ${req.requestedBusinessDays}${
-      req.employeeComment ? `\nComentario: ${req.employeeComment}` : ""
+function buildTeamsEventUrl(req: VacationRequest): string {
+  const subject = encodeURIComponent(`Vacaciones - ${req.employeeName}`);
+  const startTime = encodeURIComponent(`${req.startDate}T00:00:00`);
+  const endDate = new Date(req.endDate + "T00:00:00");
+  endDate.setDate(endDate.getDate() + 1);
+  const endTime = encodeURIComponent(`${endDate.toISOString().slice(0, 10)}T00:00:00`);
+  const content = encodeURIComponent(
+    `Solicitud de vacaciones aprobada. Días hábiles: ${req.requestedBusinessDays}${
+      req.employeeComment ? `. Comentario: ${req.employeeComment}` : ""
     }`
   );
-  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${details}`;
+  return `https://teams.microsoft.com/l/meeting/new?subject=${subject}&startTime=${startTime}&endTime=${endTime}&content=${content}`;
 }
 
 export default function RequestDetailModal({
@@ -83,17 +83,17 @@ export default function RequestDetailModal({
           )}
         </div>
 
-        {/* Export to Google Calendar */}
+        {/* Export to Microsoft Teams */}
         {request.status === "APPROVED" && (
           <div className="flex justify-center">
             <a
-              href={buildGoogleCalendarUrl(request)}
+              href={buildTeamsEventUrl(request)}
               target="_blank"
               rel="noopener noreferrer"
             >
               <Button variant="secondary" className="gap-2">
                 <ExternalLink size={16} />
-                Agregar a Google Calendar
+                Agregar a Teams
               </Button>
             </a>
           </div>

@@ -8,6 +8,7 @@ from app.api.v1.calendar import router as calendar_router
 from app.api.v1.expenses import router as expenses_router
 from app.api.v1.finance import router as finance_router
 from app.api.v1.health import router as health_router
+from app.api.v1.jira import router as jira_router
 from app.api.v1.manager import router as manager_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.team_policies import router as team_policies_router
@@ -26,3 +27,4 @@ api_router.include_router(admin_router)
 api_router.include_router(conflict_analysis_router)
 api_router.include_router(expenses_router)
 api_router.include_router(finance_router)
+api_router.include_router(jira_router)

@@ -267,6 +267,30 @@ export interface AIRecommendation {
   recommendation: string;
   key_concerns: string[];
   suggested_actions: string[];
+  jira_concerns?: string[];
+}
+
+export interface JiraIssue {
+  key: string;
+  summary: string;
+  status: string;
+  priority: string;
+  priority_raw: string;
+  due_date: string | null;
+  sprint: string | null;
+  project: string;
+  url: string;
+  type: string;
+}
+
+export interface JiraData {
+  configured: boolean;
+  success: boolean;
+  total: number;
+  issues: JiraIssue[];
+  high_priority_count: number;
+  due_during_period: number;
+  error: string | null;
 }
 
 export interface ConflictAnalysis {
@@ -281,6 +305,7 @@ export interface ConflictAnalysis {
   summary: string;
   ai_recommendation: AIRecommendation | null;
   ai_powered: boolean;
+  jira?: JiraData | null;
 }
 
 export interface DateSuggestion {

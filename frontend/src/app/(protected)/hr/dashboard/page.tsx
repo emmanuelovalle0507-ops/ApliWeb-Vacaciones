@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, UserX, AlertTriangle, Users, FileText, BarChart3, ShieldAlert, KeyRound, Briefcase, Building2 } from "lucide-react";
+import { UserPlus, Pencil, UserX, AlertTriangle, Users, FileText, BarChart3, ShieldAlert, KeyRound, Briefcase, Building2, Upload } from "lucide-react";
 import api from "@/api/client";
 import type { User, UserRole, RequestStatus, VacationBalance, UserCreatePayload, UserUpdatePayload } from "@/types";
 import RoleGuard from "@/components/layout/RoleGuard";
@@ -19,6 +19,7 @@ import ExportBar from "@/components/reports/ExportBar";
 import { downloadCSV, printAsPDF } from "@/lib/export";
 import UserFormModal from "@/components/users/UserFormModal";
 import UserCreatedModal from "@/components/users/UserCreatedModal";
+import BulkImportPanel from "@/components/hr/BulkImportPanel";
 import { useAuth } from "@/providers/AuthProvider";
 
 /* ── Helpers ── */
@@ -521,6 +522,18 @@ export default function HRDashboardPage() {
           </div>
           <Table columns={balanceColumns} data={(balancesQ.data ?? []) as BalanceRow[]} isLoading={balancesQ.isLoading} isError={balancesQ.isError} errorMessage="Error al cargar balances." onRetry={() => void balancesQ.refetch()} emptyMessage="No hay balances para este año." />
         </div>
+      ),
+    },
+    {
+      id: "import",
+      label: "Importación Masiva",
+      content: (
+        <BulkImportPanel
+          onImportComplete={() => {
+            queryClient.invalidateQueries({ queryKey: ["admin.users"] });
+            queryClient.invalidateQueries({ queryKey: ["admin.balances"] });
+          }}
+        />
       ),
     },
   ];

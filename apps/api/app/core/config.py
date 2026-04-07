@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 10
     allowed_upload_types: str = "image/jpeg,image/png,image/webp,application/pdf"
     openai_vision_model: str = "gpt-4o"
+    # Jira integration
+    jira_base_url: str | None = None
+    jira_user_email: str | None = None
+    jira_api_token: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

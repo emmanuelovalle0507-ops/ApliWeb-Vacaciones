@@ -86,33 +86,42 @@ export default function ApprovalModal({
   if (!request) return null;
 
   return (
-    <Modal open={open} onClose={handleClose} title={config.title}>
+    <Modal open={open} onClose={handleClose} title={config.title} size="lg">
       <form onSubmit={handleSubmit(onSubmit)}>
-        <div className="space-y-4">
+        <div className="space-y-5">
           {/* Request details */}
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-            <span className="text-gray-500">Empleado</span>
-            <span className="font-medium text-gray-900">{request.employeeName}</span>
-
-            <span className="text-gray-500">Área</span>
-            <span className="font-medium text-gray-900">{request.employeeArea}</span>
-
-            <span className="text-gray-500">Fechas</span>
-            <span className="font-medium text-gray-900">
-              {formatDate(request.startDate)} → {formatDate(request.endDate)}
-            </span>
-
-            <span className="text-gray-500">Días hábiles</span>
-            <span className="font-medium text-gray-900">{request.requestedBusinessDays}</span>
-
-            <span className="text-gray-500">Estado</span>
-            <span><StatusBadge status={request.status} /></span>
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Detalles de la solicitud</p>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+              <div>
+                <span className="text-gray-400 text-xs">Empleado</span>
+                <p className="font-semibold text-gray-900">{request.employeeName}</p>
+              </div>
+              <div>
+                <span className="text-gray-400 text-xs">Área</span>
+                <p className="font-semibold text-gray-900">{request.employeeArea}</p>
+              </div>
+              <div>
+                <span className="text-gray-400 text-xs">Fechas</span>
+                <p className="font-semibold text-gray-900">
+                  {formatDate(request.startDate)} → {formatDate(request.endDate)}
+                </p>
+              </div>
+              <div>
+                <span className="text-gray-400 text-xs">Días hábiles</span>
+                <p className="font-semibold text-gray-900">{request.requestedBusinessDays}</p>
+              </div>
+              <div>
+                <span className="text-gray-400 text-xs">Estado</span>
+                <p><StatusBadge status={request.status} /></p>
+              </div>
+            </div>
           </div>
 
           {request.employeeComment && (
-            <div className="p-3 bg-gray-50 rounded-lg">
-              <p className="text-xs text-gray-500 mb-1">Comentario del empleado</p>
-              <p className="text-sm text-gray-700">{request.employeeComment}</p>
+            <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Comentario del empleado</p>
+              <p className="text-sm text-gray-700 leading-relaxed">{request.employeeComment}</p>
             </div>
           )}
 
@@ -120,15 +129,17 @@ export default function ApprovalModal({
             <ConflictPanel analysis={conflictData} loading={conflictLoading} error={conflictError} />
           )}
 
-          <Textarea
-            label={action === "reject" ? "Motivo de rechazo (obligatorio)" : "Comentario de decisión (opcional)"}
-            placeholder={action === "reject" ? "Explica el motivo del rechazo..." : "Motivo de la decisión..."}
-            error={errors.comment?.message}
-            {...register("comment")}
-          />
+          <div className="pt-1">
+            <Textarea
+              label={action === "reject" ? "Motivo de rechazo (obligatorio)" : "Comentario de decisión (opcional)"}
+              placeholder={action === "reject" ? "Explica el motivo del rechazo..." : "Motivo de la decisión..."}
+              error={errors.comment?.message}
+              {...register("comment")}
+            />
+          </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6">
+        <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-100">
           <Button type="button" variant="secondary" onClick={handleClose} disabled={isSubmitting}>
             Cancelar
           </Button>

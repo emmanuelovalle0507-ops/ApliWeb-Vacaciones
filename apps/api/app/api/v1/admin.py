@@ -2,7 +2,7 @@ import io
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -37,6 +37,7 @@ from app.schemas.audit import AuditLogOut, PaginatedAuditLogList
 from app.schemas.vacation_request import PaginatedVacationRequestList, VacationRequestList, VacationRequestOut
 from app.services.reports_service import ReportsService
 from app.services.vacation_request_service import VacationRequestService
+from app.services.bulk_import_service import generate_template, process_import, generate_result_excel
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -496,3 +497,104 @@ def export_balances_report(
             "Content-Disposition": f"attachment; filename=reporte_balances_{year}.csv"
         },
     )
+
+
+# ── Bulk Import ───────────────────────────────────────────────────
+@router.get("/employees/import-template")
+def download_import_template(
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("ADMIN", "HR")),
+) -> StreamingResponse:
+    template_bytes = generate_template(db)
+    return StreamingResponse(
+        io.BytesIO(template_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=plantilla_empleados.xlsx"
+        },
+    )
+
+
+def _validate_import_file(file: UploadFile) -> bytes:
+    """Validación común para preview e import."""
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo se aceptan archivos Excel (.xlsx).",
+        )
+    content = file.file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El archivo excede el tamaño máximo de 5 MB.",
+        )
+    return content
+
+
+@router.post("/employees/import-preview")
+def preview_import(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("ADMIN", "HR")),
+):
+    content = _validate_import_file(file)
+    results, valid_count, error_count, _ = process_import(
+        file_bytes=content, db=db,
+        actor_user_id=current_user.id, actor_role=current_user.role,
+        preview_only=True,
+    )
+    return {
+        "valid": valid_count,
+        "errors": error_count,
+        "total": valid_count + error_count,
+        "results": results,
+    }
+
+
+@router.post("/employees/import")
+def import_employees(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("ADMIN", "HR")),
+):
+    import base64
+
+    content = _validate_import_file(file)
+    results, created_count, error_count, batch_id = process_import(
+        file_bytes=content, db=db,
+        actor_user_id=current_user.id, actor_role=current_user.role,
+    )
+
+    if created_count > 0:
+        AuditRepository(db).log(
+            actor_user_id=current_user.id,
+            action="BULK_IMPORT",
+            entity_type="user",
+            entity_id="bulk",
+            metadata={"created": created_count, "errors": error_count,
+                      "total_rows": created_count + error_count, "batch_id": batch_id},
+        )
+        db.commit()
+
+    result_excel = generate_result_excel(results)
+    result_b64 = base64.b64encode(result_excel).decode("utf-8")
+
+    return {
+        "created": created_count,
+        "errors": error_count,
+        "total": created_count + error_count,
+        "results": results,
+        "result_file_b64": result_b64,
+        "batch_id": batch_id,
+    }
+
+
+@router.post("/employees/import-rollback/{batch_id}")
+def rollback_import_endpoint(
+    batch_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("ADMIN", "HR")),
+):
+    from app.services.bulk_import_service import rollback_import
+    result = rollback_import(batch_id=batch_id, db=db, actor_user_id=current_user.id)
+    return result

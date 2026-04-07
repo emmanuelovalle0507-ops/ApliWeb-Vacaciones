@@ -14,6 +14,7 @@ from app.repositories.team_policy_repo import TeamPolicyRepository
 from app.repositories.user_repo import UserRepository
 from app.repositories.vacation_request_repo import VacationRequestRepository
 from app.services.llm_service import LLMService
+from app.services import jira_service
 
 logger = logging.getLogger(__name__)  # AI-powered conflict analysis
 
@@ -27,7 +28,8 @@ REGLAS:
 - Analiza los datos proporcionados (cobertura diaria, personas fuera, política del equipo).
 - Evalúa el impacto operativo real: ¿el equipo puede funcionar con esa cobertura?
 - Considera patrones: ¿hay días consecutivos con baja cobertura? ¿es un periodo crítico?
-- Sé específico: menciona nombres, fechas y porcentajes concretos.
+- Si hay datos de Jira (tickets del empleado), analiza la carga de trabajo: ¿tiene tickets de alta prioridad? ¿vencen durante las vacaciones?
+- Sé específico: menciona nombres, fechas, porcentajes concretos y tickets relevantes.
 
 Formato de respuesta JSON:
 {
@@ -35,7 +37,8 @@ Formato de respuesta JSON:
   "summary": "Resumen ejecutivo en 1-2 oraciones en español",
   "recommendation": "Recomendación detallada al manager en español (2-4 oraciones). Incluye razones concretas.",
   "key_concerns": ["lista de preocupaciones específicas si las hay"],
-  "suggested_actions": ["acciones sugeridas para mitigar riesgos si aplica"]
+  "suggested_actions": ["acciones sugeridas para mitigar riesgos si aplica"],
+  "jira_concerns": ["preocupaciones sobre tickets de Jira si aplica, vacío si no hay datos de Jira"]
 }
 """
 
@@ -128,7 +131,16 @@ class ConflictAnalysisService:
 
         requester = self.user_repo.get_by_id(str(request.employee_id))
         requester_name = requester.full_name if requester else "Empleado"
+        requester_email = requester.email if requester else None
         bdays_requested = sum(1 for _ in self._iter_business_days(start, end))
+
+        # ── 1b. Jira data ──────────────────────────────────
+        jira_data = None
+        if requester_email:
+            try:
+                jira_data = jira_service.get_employee_issues(requester_email, start, end)
+            except Exception as exc:
+                logger.warning("Jira query failed for %s: %s", requester_email, exc)
 
         # Overlapping approved requests (exclude self)
         overlapping = self.request_repo.list_team_approved_in_range(team_id, start, end)
@@ -224,6 +236,7 @@ class ConflictAnalysisService:
                 algo_risk=algo_risk,
                 min_coverage=min_coverage,
                 exceeds_count=exceeds_count,
+                jira_data=jira_data,
             )
             if ai_result:
                 risk_level = ai_result.get("risk_level", algo_risk)
@@ -234,6 +247,7 @@ class ConflictAnalysisService:
                     "recommendation": ai_result.get("recommendation", ""),
                     "key_concerns": ai_result.get("key_concerns", []),
                     "suggested_actions": ai_result.get("suggested_actions", []),
+                    "jira_concerns": ai_result.get("jira_concerns", []),
                 }
         except Exception as exc:
             logger.warning("AI conflict analysis failed, using algorithmic fallback: %s", exc)
@@ -250,6 +264,7 @@ class ConflictAnalysisService:
             "summary": summary,
             "ai_recommendation": ai_recommendation,
             "ai_powered": ai_recommendation is not None,
+            "jira": jira_data,
         }
 
     def _ask_llm_analysis(
@@ -264,6 +279,7 @@ class ConflictAnalysisService:
         algo_risk: str,
         min_coverage: float,
         exceeds_count: int,
+        jira_data: dict | None = None,
     ) -> dict | None:
         """Send team data to OpenAI and get an intelligent risk assessment."""
         if not self.llm.enabled:
@@ -281,7 +297,7 @@ class ConflictAnalysisService:
                 "personas_fuera": d["off_names"],
             })
 
-        user_message = json.dumps({
+        payload = {
             "solicitud": {
                 "empleado": requester_name,
                 "dias_solicitados": days_requested,
@@ -296,7 +312,28 @@ class ConflictAnalysisService:
             },
             "cobertura_diaria": daily_compact,
             "compañeros_en_vacaciones": overlap_summary,
-        }, ensure_ascii=False, indent=2)
+        }
+
+        if jira_data and jira_data.get("success") and jira_data.get("issues"):
+            jira_compact = []
+            for iss in jira_data["issues"]:
+                jira_compact.append({
+                    "ticket": iss["key"],
+                    "titulo": iss["summary"],
+                    "prioridad": iss["priority"],
+                    "estado": iss["status"],
+                    "fecha_vencimiento": iss.get("due_date") or "Sin fecha",
+                    "sprint": iss.get("sprint") or "Sin sprint",
+                    "proyecto": iss["project"],
+                })
+            payload["jira_tickets_empleado"] = {
+                "total": jira_data["total"],
+                "alta_prioridad": jira_data["high_priority_count"],
+                "vencen_en_periodo": jira_data["due_during_period"],
+                "tickets": jira_compact,
+            }
+
+        user_message = json.dumps(payload, ensure_ascii=False, indent=2)
 
         result_text = self.llm.chat_with_role(
             _CONFLICT_SYSTEM_PROMPT,

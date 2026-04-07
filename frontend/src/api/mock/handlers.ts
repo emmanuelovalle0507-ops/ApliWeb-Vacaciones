@@ -868,3 +868,44 @@ export async function getMyTeamInfo(): Promise<import("@/types").TeamInfo> {
   await delay(300);
   return { manager: null, team_members: [], on_vacation_now: [], upcoming_vacations: [] };
 }
+
+// ── Bulk Import ──────────────────────────────────────
+export async function downloadImportTemplate(): Promise<void> {
+  await delay(200);
+  alert("[Mock] Plantilla descargada (mock).");
+}
+
+export async function previewImport(_file: File): Promise<import("@/api/real/client").BulkPreviewResponse> {
+  await delay(500);
+  return {
+    valid: 2,
+    errors: 1,
+    total: 3,
+    results: [
+      { row: 2, name: "Juan Pérez", email: "juanp@seekop.com", role: "EMPLOYEE", team: "Desarrollo", vacation_days: 12, status: "VÁLIDO", detail: "Listo para importar — 12 días de vacaciones" },
+      { row: 3, name: "María López", email: "marial@seekop.com", role: "MANAGER", team: "Diseño", vacation_days: 14, status: "VÁLIDO", detail: "Listo para importar — 14 días de vacaciones" },
+      { row: 4, name: "Pedro Ruiz", email: "pedror@seekop.com", role: "EMPLOYEE", team: "Ventas", status: "ERROR", detail: "equipo no encontrado: Ventas" },
+    ],
+  };
+}
+
+export async function importEmployees(_file: File): Promise<import("@/api/real/client").BulkImportResponse> {
+  await delay(500);
+  return {
+    created: 2,
+    errors: 1,
+    total: 3,
+    results: [
+      { row: 2, name: "Juan Pérez", email: "juanp@seekop.com", role: "EMPLOYEE", team: "Desarrollo", password: "Skp-Juan123!", vacation_days: 12, status: "CREADO", detail: "Antigüedad: 1 año(s). Días otorgados: 12." },
+      { row: 3, name: "María López", email: "marial@seekop.com", role: "MANAGER", team: "Diseño", password: "Skp-Mari456@", vacation_days: 14, status: "CREADO", detail: "Antigüedad: 2 año(s). Días otorgados: 14." },
+      { row: 4, name: "Pedro Ruiz", email: "pedror@seekop.com", role: "EMPLOYEE", team: "Ventas", status: "ERROR", detail: "equipo no encontrado: Ventas" },
+    ],
+    result_file_b64: "",
+    batch_id: "mock-batch-id",
+  };
+}
+
+export async function rollbackImport(_batchId: string): Promise<import("@/api/real/client").BulkRollbackResponse> {
+  await delay(300);
+  return { rolled_back: 2, emails: ["juanp@seekop.com", "marial@seekop.com"], detail: "Se desactivaron 2 usuario(s) del lote mock…" };
+}
