@@ -37,7 +37,7 @@ export default function Table<T>({
             {columns.map((col) => (
               <th
                 key={col.key}
-                className={`px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider ${col.className ?? ""}`}
+                className={`px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider ${col.className ?? ""}`}
               >
                 {col.header}
               </th>
@@ -49,7 +49,7 @@ export default function Table<T>({
             Array.from({ length: 3 }).map((_, i) => (
               <tr key={`skeleton-${i}`}>
                 {columns.map((col) => (
-                  <td key={col.key} className="px-6 py-4">
+                  <td key={col.key} className="px-4 py-3">
                     <div className="h-4 bg-gray-100 rounded animate-pulse" style={{ width: `${60 + Math.random() * 30}%` }} />
                   </td>
                 ))}
@@ -57,7 +57,7 @@ export default function Table<T>({
             ))
           ) : isError ? (
             <tr>
-              <td colSpan={columns.length} className="px-6 py-10 text-center">
+              <td colSpan={columns.length} className="px-4 py-10 text-center">
                 <div className="flex flex-col items-center gap-2">
                   <AlertTriangle size={24} className="text-red-400" />
                   <p className="text-sm text-red-600 font-medium">
@@ -77,7 +77,7 @@ export default function Table<T>({
             </tr>
           ) : data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-6 py-10 text-center">
+              <td colSpan={columns.length} className="px-4 py-10 text-center">
                 <div className="flex flex-col items-center gap-2">
                   <Inbox size={24} className="text-gray-300" />
                   <p className="text-sm text-gray-400">{emptyMessage}</p>
@@ -88,7 +88,7 @@ export default function Table<T>({
             data.map((row, idx) => (
               <tr key={idx} className="hover:bg-seekop-50/60 transition-colors">
                 {columns.map((col) => (
-                  <td key={col.key} className={`px-6 py-4 whitespace-nowrap text-sm text-gray-700 ${col.className ?? ""}`}>
+                  <td key={col.key} className={`px-4 py-3 whitespace-nowrap text-sm text-gray-700 ${col.className ?? ""}`}>
                     {col.render
                       ? col.render(row)
                       : String((row as Record<string, unknown>)[col.key] ?? "")}

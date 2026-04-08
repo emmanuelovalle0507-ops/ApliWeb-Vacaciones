@@ -426,6 +426,11 @@ export async function deactivateUser(userId: string): Promise<User> {
   return { ...user, isActive: false };
 }
 
+export async function deleteUserPermanently(userId: string): Promise<{ detail: string }> {
+  await delay(500);
+  return { detail: `Usuario ${userId} eliminado permanentemente.` };
+}
+
 export async function changePassword(_currentPassword: string, _newPassword: string): Promise<void> {
   await delay(400);
 }

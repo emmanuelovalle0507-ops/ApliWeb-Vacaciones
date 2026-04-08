@@ -42,6 +42,7 @@ export const api = {
       create: impl.createUser,
       update: impl.updateUser,
       deactivate: impl.deactivateUser,
+      deletePermanently: impl.deleteUserPermanently,
     },
     requests: { list: impl.listAllRequests },
     balances: { list: impl.listAllBalances },

@@ -547,6 +547,12 @@ export async function deactivateUser(userId: string): Promise<User> {
   return mapUserFull(result);
 }
 
+export async function deleteUserPermanently(userId: string): Promise<{ detail: string }> {
+  return request<{ detail: string }>(`/admin/users/${userId}`, {
+    method: "DELETE",
+  });
+}
+
 export async function listAllRequests(filters?: RequestFilters, pagination?: PaginationParams): Promise<PaginatedResponse<VacationRequest>> {
   const params = new URLSearchParams();
   if (filters?.status) params.set("status", filters.status);

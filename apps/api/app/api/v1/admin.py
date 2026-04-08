@@ -273,6 +273,87 @@ def deactivate_user(
     return _user_to_out(user, repo, team_repo)
 
 
+@router.delete("/users/{user_id}", status_code=status.HTTP_200_OK)
+def delete_user_permanently(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserSummary = Depends(require_roles("ADMIN", "HR")),
+):
+    """Elimina permanentemente un usuario y todos sus datos relacionados.
+    Solo se permite para usuarios INACTIVOS y que no sean ADMIN."""
+    from sqlalchemy import text
+
+    repo = UserRepository(db)
+    user = repo.get_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+    if user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Solo se pueden eliminar usuarios desactivados. Desactívalo primero.",
+        )
+    if user.role == UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No se puede eliminar un usuario con rol Administrador.",
+        )
+    if current_user.role == "HR" and user.role == UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="RH no puede eliminar usuarios con rol Administrador.",
+        )
+
+    user_email = user.email
+    user_name = user.full_name
+    uid = str(user.id)
+
+    # Eliminar en orden para respetar foreign keys
+    # Balance adjustments del usuario y de sus requests como empleado
+    db.execute(text("DELETE FROM balance_adjustments WHERE user_id = :uid"), {"uid": uid})
+    db.execute(text("""
+        DELETE FROM balance_adjustments WHERE request_id IN (
+            SELECT id FROM vacation_requests WHERE employee_id = :uid OR manager_id = :uid
+        )
+    """), {"uid": uid})
+    # Requests donde era empleado O manager (manager_id es NOT NULL, no se puede SET NULL)
+    db.execute(text("DELETE FROM vacation_requests WHERE employee_id = :uid OR manager_id = :uid"), {"uid": uid})
+    db.execute(text("DELETE FROM vacation_balances WHERE user_id = :uid"), {"uid": uid})
+    db.execute(text("DELETE FROM user_managers WHERE user_id = :uid OR manager_id = :uid"), {"uid": uid})
+    db.execute(text("DELETE FROM notifications WHERE user_id = :uid"), {"uid": uid})
+    db.execute(text("DELETE FROM ai_chat_interactions WHERE actor_user_id = :uid"), {"uid": uid})
+    db.execute(text("DELETE FROM audit_logs WHERE entity_type = 'user' AND entity_id = :uid"), {"uid": uid})
+    # Eliminar expense data si existe
+    db.execute(text("""
+        DELETE FROM expense_receipts WHERE report_id IN (
+            SELECT id FROM expense_reports WHERE owner_id = :uid
+        )
+    """), {"uid": uid})
+    db.execute(text("""
+        DELETE FROM expense_actions WHERE report_id IN (
+            SELECT id FROM expense_reports WHERE owner_id = :uid
+        )
+    """), {"uid": uid})
+    db.execute(text("DELETE FROM expense_reports WHERE owner_id = :uid"), {"uid": uid})
+
+    # Quitar manager_id de otros usuarios que tenían a este como manager
+    db.execute(text("UPDATE users SET manager_id = NULL WHERE manager_id = :uid"), {"uid": uid})
+
+    # Eliminar el usuario
+    db.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": uid})
+
+    # Registrar en auditoría (como acción del actor, no del eliminado)
+    AuditRepository(db).log(
+        actor_user_id=current_user.id,
+        action="USER_DELETED_PERMANENTLY",
+        entity_type="user",
+        entity_id=uid,
+        metadata={"email": user_email, "full_name": user_name},
+    )
+
+    db.commit()
+    return {"detail": f"Usuario {user_name} ({user_email}) eliminado permanentemente."}
+
+
 # ── Requests ─────────────────────────────────────────────────────────
 @router.get("/vacation-requests", response_model=PaginatedVacationRequestList)
 def list_all_requests(

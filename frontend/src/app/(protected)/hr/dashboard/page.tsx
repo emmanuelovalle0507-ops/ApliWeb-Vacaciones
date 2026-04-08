@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, UserX, AlertTriangle, Users, FileText, BarChart3, ShieldAlert, KeyRound, Briefcase, Building2, Upload } from "lucide-react";
+import { UserPlus, Pencil, UserX, Trash2, AlertTriangle, Users, FileText, BarChart3, ShieldAlert, KeyRound, Briefcase, Building2, Upload } from "lucide-react";
 import api from "@/api/client";
 import type { User, UserRole, RequestStatus, VacationBalance, UserCreatePayload, UserUpdatePayload } from "@/types";
 import RoleGuard from "@/components/layout/RoleGuard";
@@ -68,6 +68,8 @@ export default function HRDashboardPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [createdCreds, setCreatedCreds] = useState<{
     name: string; email: string; password: string; emailSent: boolean;
   } | null>(null);
@@ -193,6 +195,21 @@ export default function HRDashboardPage() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => api.admin.users.deletePermanently(userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin.users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin.balances"] });
+      queryClient.invalidateQueries({ queryKey: ["admin.requests"] });
+      setDeleteTarget(null);
+      setDeleteConfirmName("");
+      toast("success", "Empleado eliminado permanentemente del sistema.");
+    },
+    onError: (err: Error) => {
+      toast("error", err.message || "Error al eliminar usuario.");
+    },
+  });
+
   // ── Managers list (for the form) ──
   const managerCandidates = (usersQ.data ?? []).filter(
     (u) => (u.role === "MANAGER" || u.role === "ADMIN") && u.isActive !== false
@@ -203,70 +220,58 @@ export default function HRDashboardPage() {
     {
       key: "fullName",
       header: "Empleado",
-      render: (row) => (
-        <div className="flex items-center gap-3">
-          <div className={`flex items-center justify-center w-8 h-8 rounded-full text-white text-xs font-bold shrink-0 ${avatarColor(row.id)}`}>
-            {getInitials(row.fullName)}
+      render: (row) => {
+        const fallbackPosition = row.role === "ADMIN" ? "Administrador" : row.role === "HR" ? "Recursos Humanos" : null;
+        const position = row.position || fallbackPosition;
+        return (
+          <div className="flex items-center gap-3">
+            <div className={`flex items-center justify-center w-9 h-9 rounded-full text-white text-xs font-bold shrink-0 ${avatarColor(row.id)}`}>
+              {getInitials(row.fullName)}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{row.fullName}</p>
+              <p className="text-xs text-gray-400 truncate">{row.email}</p>
+              {position && <p className="text-[11px] text-gray-400 truncate">{position}</p>}
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">{row.fullName}</p>
-            <p className="text-xs text-gray-400 truncate">{row.email}</p>
-          </div>
-        </div>
-      ),
+        );
+      },
     },
     { key: "role", header: "Rol", render: (row) => <RoleBadge role={row.role} /> },
     {
       key: "area",
       header: "Equipo",
       render: (row) => (
-        <span className="text-sm text-gray-600">{row.area.name}</span>
+        <span className="text-sm text-gray-600 truncate max-w-[140px] block">{row.area.name}</span>
       ),
-    },
-    {
-      key: "position",
-      header: "Puesto",
-      render: (row) => {
-        const fallbackPosition = row.role === "ADMIN" ? "Administrador" : row.role === "HR" ? "Recursos Humanos" : null;
-        return (
-          <span className="text-sm text-gray-500">{row.position || fallbackPosition || <span className="text-gray-300">Sin asignar</span>}</span>
-        );
-      },
     },
     {
       key: "managerIds",
-      header: "Managers",
+      header: "Manager",
       render: (row) => {
         const managerCount = row.managerIds?.length ?? (row.managerId ? 1 : 0);
         return managerCount > 0 ? (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 px-2.5 py-1 rounded-full">
-            <Users size={12} /> {managerCount}
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full">
+            <Users size={11} /> {managerCount}
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 px-2.5 py-1 rounded-full">
-            <AlertTriangle size={12} /> Sin manager
+          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
+            <AlertTriangle size={11} /> Sin
           </span>
         );
       },
-    },
-    {
-      key: "hireDate",
-      header: "Ingreso",
-      render: (row) => (
-        <span className="text-sm text-gray-500">{row.hireDate || <span className="text-gray-300">Sin fecha</span>}</span>
-      ),
     },
     {
       key: "isActive",
       header: "Estado",
       render: (row) =>
         row.isActive === false ? (
-          <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 border border-red-100 px-2.5 py-1 rounded-full">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
             <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
             Inactivo
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             Activo
           </span>
@@ -274,30 +279,37 @@ export default function HRDashboardPage() {
     },
     {
       key: "id",
-      header: "Acciones",
+      header: "",
       render: (row) => {
         const isAdminTarget = row.role === "ADMIN";
         const blocked = isHR && isAdminTarget;
         return (
-          <div className="flex items-center gap-2 justify-end">
+          <div className="flex items-center gap-1.5 justify-end">
             {!blocked && (
               <button
                 onClick={() => setEditUser(row)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-seekop-700 bg-seekop-50 hover:bg-seekop-100 border border-seekop-200 rounded-xl transition-all duration-200"
-                title="Editar usuario o promover a manager"
+                className="p-2 text-[#002a7f] bg-[#002a7f]/5 hover:bg-[#002a7f]/15 border border-[#002a7f]/15 rounded-lg transition-all duration-200"
+                title="Editar empleado"
               >
                 <Pencil size={14} />
-                Editar
               </button>
             )}
             {row.isActive !== false && !blocked && (
               <button
                 onClick={() => setDeactivateTarget(row)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-xl transition-all duration-200"
+                className="p-2 text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-all duration-200"
                 title="Desactivar empleado"
               >
                 <UserX size={14} />
-                Desactivar
+              </button>
+            )}
+            {row.isActive === false && !blocked && (
+              <button
+                onClick={() => { setDeleteTarget(row); setDeleteConfirmName(""); }}
+                className="p-2 text-red-600 bg-red-100 hover:bg-red-200 border border-red-300 rounded-lg transition-all duration-200"
+                title="Eliminar permanentemente"
+              >
+                <Trash2 size={14} />
               </button>
             )}
           </div>
@@ -687,6 +699,61 @@ export default function HRDashboardPage() {
                   onClick={() => deactivateMutation.mutate(deactivateTarget.id)}
                 >
                   Sí, desactivar
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Permanently Confirmation */}
+        {deleteTarget && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+              <div className="px-6 pt-6 pb-4">
+                <div className="mx-auto flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
+                  <Trash2 size={28} className="text-red-600" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-900 mb-2 text-center">Eliminar permanentemente</h3>
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+                  <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-1">Advertencia: esta accion es irreversible</p>
+                  <p className="text-xs text-red-600 leading-relaxed">
+                    Se eliminaran todos los datos de <span className="font-bold">{deleteTarget.fullName}</span>: solicitudes de vacaciones, balances, notificaciones y registros del sistema.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">
+                    Para confirmar, escribe el nombre del empleado:
+                  </p>
+                  <p className="text-sm font-bold text-gray-900 bg-gray-50 rounded-lg px-3 py-2 text-center select-all">
+                    {deleteTarget.fullName}
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteConfirmName}
+                    onChange={(e) => setDeleteConfirmName(e.target.value)}
+                    placeholder="Escribe el nombre completo aqui..."
+                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-red-400"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 px-6 py-4 bg-gray-50/50 border-t border-gray-100">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => { setDeleteTarget(null); setDeleteConfirmName(""); }}
+                  disabled={deleteMutation.isPending}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  variant="danger"
+                  className="flex-1"
+                  loading={deleteMutation.isPending}
+                  disabled={deleteConfirmName.trim().toLowerCase() !== deleteTarget.fullName.trim().toLowerCase()}
+                  onClick={() => deleteMutation.mutate(deleteTarget.id)}
+                >
+                  Eliminar para siempre
                 </Button>
               </div>
             </div>
