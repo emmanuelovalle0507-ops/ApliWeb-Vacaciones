@@ -185,24 +185,51 @@ export default function ProfilePage() {
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header Card */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="h-28 bg-gradient-to-r from-seekop-500 via-seekop-600 to-seekop-700 relative">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIyMCIgY3k9IjIwIiByPSIxIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDUpIi8+PC9zdmc+')] opacity-60" />
+        <div className="h-36 sm:h-40 bg-gradient-to-br from-[#001a4f] via-[#002a7f] to-[#003da8] relative overflow-hidden">
+          {/* Geometric wave pattern */}
+          <svg className="absolute inset-0 w-full h-full opacity-[0.07]" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="profile-grid" width="60" height="60" patternUnits="userSpaceOnUse">
+                <path d="M 60 0 L 0 60" stroke="white" strokeWidth="0.5" fill="none" />
+                <path d="M 30 0 L 0 30" stroke="white" strokeWidth="0.5" fill="none" />
+                <path d="M 60 30 L 30 60" stroke="white" strokeWidth="0.5" fill="none" />
+                <circle cx="0" cy="0" r="1.5" fill="white" />
+                <circle cx="60" cy="60" r="1.5" fill="white" />
+                <circle cx="30" cy="30" r="1" fill="white" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#profile-grid)" />
+          </svg>
+          {/* Accent glow */}
+          <div className="absolute -top-10 -right-10 w-60 h-60 bg-[#9ab236]/20 rounded-full blur-3xl" />
+          <div className="absolute -bottom-20 -left-10 w-48 h-48 bg-white/5 rounded-full blur-2xl" />
+          {/* Seekop logo watermark */}
+          <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-[0.10] pointer-events-none">
+            <img src="/branding/seekop-logo.png" alt="" className="h-16 sm:h-20 object-contain brightness-0 invert" />
+          </div>
+          {/* Seekop Consulting text */}
+          <div className="absolute left-8 top-4 sm:top-5">
+            <p className="text-[10px] sm:text-xs font-semibold text-white/40 uppercase tracking-[0.2em]">Seekop Consulting</p>
+          </div>
         </div>
-        <div className="px-8 pb-6 -mt-14 relative">
+        <div className="px-6 sm:px-8 pb-6 -mt-16 relative">
           <div className="flex flex-col sm:flex-row sm:items-end gap-5">
-            <div className={`flex items-center justify-center w-24 h-24 rounded-2xl bg-gradient-to-br ${avatarGradient(user.id)} text-white text-3xl font-bold shadow-lg border-4 border-white shrink-0`}>
+            <div className={`flex items-center justify-center w-[88px] h-[88px] sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br ${avatarGradient(user.id)} text-white text-3xl font-bold shadow-xl border-4 border-white shrink-0 ring-4 ring-white/50`}>
               {getInitials(user.fullName)}
             </div>
-            <div className="flex-1 pt-2">
-              <h1 className="text-2xl font-bold text-gray-900">{user.fullName}</h1>
-              <div className="flex flex-wrap items-center gap-3 mt-1">
-                <span className="inline-flex items-center gap-1.5 text-sm text-gray-500">
-                  <Mail size={14} /> {user.email}
+            <div className="flex-1 pt-2 min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{user.fullName}</h1>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5">
+                <span className="inline-flex items-center gap-1.5 text-sm text-gray-500 truncate">
+                  <Mail size={14} className="shrink-0" /> <span className="truncate">{user.email}</span>
                 </span>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-semibold bg-seekop-50 text-seekop-700 rounded-full border border-seekop-200">
                   <Shield size={12} /> {ROLE_LABELS[user.role]}
                 </span>
               </div>
+              {user.position && (
+                <p className="text-xs text-gray-400 mt-1">{user.position}</p>
+              )}
             </div>
           </div>
         </div>
