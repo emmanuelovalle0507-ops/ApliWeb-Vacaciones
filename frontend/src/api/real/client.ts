@@ -333,6 +333,13 @@ export async function changePassword(currentPassword: string, newPassword: strin
   });
 }
 
+export async function forgotPassword(email: string): Promise<{ message: string; email_sent: boolean; temp_password?: string | null }> {
+  return request("/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
 // ── Me ─────────────────────────────────────────────────
 export async function getMe(_userId: string): Promise<User> {
   const me = await request<BackendUserSummary>("/auth/me");

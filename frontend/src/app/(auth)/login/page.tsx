@@ -4,9 +4,10 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Eye, EyeOff, AlertCircle, Loader2, Shield, BarChart3, Users, CalendarCheck } from "lucide-react";
+import { Eye, EyeOff, AlertCircle, Loader2, Shield, BarChart3, Users, CalendarCheck, Mail, ArrowLeft, KeyRound, UserX, CheckCircle2, Copy, Phone } from "lucide-react";
 import { loginSchema, type LoginFormData } from "@/types/schemas";
 import { useAuth } from "@/providers/AuthProvider";
+import api from "@/api/client";
 
 function SeekopLogo({ size = "lg" }: { size?: "sm" | "lg" }) {
   const isLg = size === "lg";
@@ -40,7 +41,52 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  // Forgot password state
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotResult, setForgotResult] = useState<{ message: string; email_sent: boolean; temp_password?: string | null } | null>(null);
+  const [forgotError, setForgotError] = useState("");
+  const [copiedPass, setCopiedPass] = useState(false);
+
   useEffect(() => { setMounted(true); }, []);
+
+  function getErrorInfo(msg: string) {
+    if (msg.includes("no esta registrado") || msg.includes("not found")) {
+      return { icon: Mail, title: "Correo no encontrado", color: "amber" as const };
+    }
+    if (msg.includes("desactivada")) {
+      return { icon: UserX, title: "Cuenta desactivada", color: "red" as const };
+    }
+    if (msg.includes("incorrecta") || msg.includes("contraseña")) {
+      return { icon: KeyRound, title: "Contraseña incorrecta", color: "red" as const };
+    }
+    return { icon: AlertCircle, title: "Error de autenticacion", color: "red" as const };
+  }
+
+  async function handleForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!forgotEmail.trim()) return;
+    setForgotLoading(true);
+    setForgotError("");
+    setForgotResult(null);
+    try {
+      const result = await api.auth.forgotPassword(forgotEmail.trim());
+      setForgotResult(result);
+    } catch (err: unknown) {
+      setForgotError(err instanceof Error ? err.message : "Error al procesar la solicitud.");
+    } finally {
+      setForgotLoading(false);
+    }
+  }
+
+  function closeForgot() {
+    setShowForgot(false);
+    setForgotEmail("");
+    setForgotResult(null);
+    setForgotError("");
+    setCopiedPass(false);
+  }
 
   const {
     register,
@@ -187,17 +233,26 @@ export default function LoginPage() {
               </div>
 
               {/* Error */}
-              {serverError && (
-                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl animate-[shakeX_0.5s_ease-in-out]">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-full bg-red-100 shrink-0">
-                    <AlertCircle size={18} className="text-red-500" />
+              {serverError && (() => {
+                const info = getErrorInfo(serverError);
+                const ErrorIcon = info.icon;
+                const isAmber = info.color === "amber";
+                return (
+                  <div className={`flex items-start gap-3 p-4 rounded-2xl border ${
+                    isAmber ? "bg-amber-50 border-amber-200" : "bg-red-50 border-red-200"
+                  }`}>
+                    <div className={`flex items-center justify-center w-9 h-9 rounded-full shrink-0 ${
+                      isAmber ? "bg-amber-100" : "bg-red-100"
+                    }`}>
+                      <ErrorIcon size={18} className={isAmber ? "text-amber-600" : "text-red-500"} />
+                    </div>
+                    <div>
+                      <p className={`text-sm font-semibold ${isAmber ? "text-amber-800" : "text-red-700"}`}>{info.title}</p>
+                      <p className={`text-xs mt-0.5 ${isAmber ? "text-amber-600" : "text-red-600"}`}>{serverError}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-red-700">No pudimos validar tus credenciales</p>
-                    <p className="text-xs text-red-600 mt-0.5">{serverError}</p>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Submit */}
               <button
@@ -215,8 +270,149 @@ export default function LoginPage() {
                 )}
               </button>
 
+              {/* Forgot password link */}
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={() => { setShowForgot(true); setServerError(""); }}
+                  className="text-sm text-seekop-600 hover:text-seekop-700 hover:underline transition-colors font-medium"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+
             </form>
           </div>
+
+          {/* Forgot Password Modal */}
+          {showForgot && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+              <div className={`bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden transition-all duration-300 ${mounted ? "scale-100 opacity-100" : "scale-95 opacity-0"}`}>
+                {!forgotResult ? (
+                  <>
+                    <div className="px-8 pt-8 pb-2">
+                      <div className="mx-auto flex items-center justify-center w-16 h-16 rounded-2xl bg-seekop-50 border border-seekop-100 mb-5">
+                        <KeyRound size={28} className="text-seekop-600" />
+                      </div>
+                      <h3 className="text-xl font-bold text-gray-900 text-center">Recuperar contraseña</h3>
+                      <p className="text-sm text-gray-500 text-center mt-2 leading-relaxed">
+                        Ingresa tu correo corporativo y te enviaremos una contraseña temporal para que puedas acceder.
+                      </p>
+                    </div>
+                    <form onSubmit={handleForgotPassword} className="px-8 pb-8 pt-4 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Correo electronico</label>
+                        <div className="relative">
+                          <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400">
+                            <Mail size={16} />
+                          </div>
+                          <input
+                            type="email"
+                            value={forgotEmail}
+                            onChange={(e) => setForgotEmail(e.target.value)}
+                            placeholder="tu@seekop.com"
+                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm outline-none bg-gray-50 focus:bg-white focus:ring-2 focus:ring-seekop-400/30 focus:border-seekop-500 transition-all"
+                            autoFocus
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      {forgotError && (
+                        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+                          <AlertCircle size={15} className="text-red-500 shrink-0 mt-0.5" />
+                          <p className="text-xs text-red-700">{forgotError}</p>
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={forgotLoading || !forgotEmail.trim()}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-seekop-500 hover:bg-seekop-600 text-white font-semibold rounded-xl text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {forgotLoading ? (
+                          <><Loader2 size={16} className="animate-spin" /> Enviando...</>
+                        ) : (
+                          <><Mail size={16} /> Enviar contraseña temporal</>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={closeForgot}
+                        className="w-full flex items-center justify-center gap-2 text-sm text-gray-500 hover:text-gray-700 py-2 transition-colors"
+                      >
+                        <ArrowLeft size={14} /> Volver al inicio de sesion
+                      </button>
+
+                      <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 mt-2">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          <Phone size={12} /> Tambien puedes contactar a RH
+                        </p>
+                        <p className="text-xs text-gray-400 leading-relaxed">
+                          Si no tienes acceso a tu correo, contacta al equipo de Recursos Humanos para que restablezcan tu contraseña manualmente.
+                        </p>
+                      </div>
+                    </form>
+                  </>
+                ) : (
+                  <div className="px-8 py-8">
+                    <div className="mx-auto flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-100 mb-5">
+                      <CheckCircle2 size={28} className="text-emerald-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 text-center">Solicitud procesada</h3>
+                    <p className="text-sm text-gray-500 text-center mt-2 leading-relaxed">
+                      {forgotResult.message}
+                    </p>
+
+                    {forgotResult.temp_password && (
+                      <div className="mt-5 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-2">
+                          Contraseña temporal generada
+                        </p>
+                        <p className="text-[10px] text-amber-600 mb-3">
+                          El servicio de correo no esta disponible. Copia esta contraseña temporal:
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 bg-white px-3 py-2.5 rounded-lg text-sm font-mono font-bold text-gray-900 border border-amber-200 text-center tracking-wider">
+                            {forgotResult.temp_password}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => { navigator.clipboard.writeText(forgotResult.temp_password!); setCopiedPass(true); setTimeout(() => setCopiedPass(false), 2000); }}
+                            className={`px-3 py-2.5 rounded-lg text-xs font-medium border transition-all ${
+                              copiedPass
+                                ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                                : "bg-white border-amber-200 text-amber-700 hover:bg-amber-100"
+                            }`}
+                          >
+                            {copiedPass ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-amber-500 mt-2">Al iniciar sesion se te pedira cambiarla.</p>
+                      </div>
+                    )}
+
+                    {forgotResult.email_sent && (
+                      <div className="mt-5 bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                        <p className="text-sm text-emerald-700 text-center">
+                          Revisa tu bandeja de entrada (y spam) para encontrar el correo con tu nueva contraseña temporal.
+                        </p>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={closeForgot}
+                      className="w-full mt-5 flex items-center justify-center gap-2 px-4 py-3 bg-seekop-500 hover:bg-seekop-600 text-white font-semibold rounded-xl text-sm transition-all"
+                    >
+                      <ArrowLeft size={14} /> Volver al inicio de sesion
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Footer on mobile */}
           <div className="text-center text-xs text-gray-400 mt-6 lg:hidden space-y-1">

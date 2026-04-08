@@ -49,6 +49,64 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)) -> dict:
+    """Genera una contraseña temporal y la envía por email al usuario."""
+    import secrets
+    from app.core.security import hash_password
+    from app.services.email_service import send_email
+    from app.core.config import settings
+
+    user_repo = UserRepository(db)
+    audit = AuditRepository(db)
+    user = user_repo.get_by_email(payload.email)
+
+    # Siempre retornamos OK para no revelar si el email existe
+    success_msg = "Si el correo esta registrado, recibiras una contraseña temporal en tu bandeja de entrada."
+
+    if not user:
+        return {"message": success_msg, "email_sent": False}
+
+    if not user.is_active:
+        return {"message": "Tu cuenta esta desactivada. Contacta a Recursos Humanos.", "email_sent": False}
+
+    # Generar contraseña temporal
+    temp_password = secrets.token_urlsafe(8)
+    user.password_hash = hash_password(temp_password)
+    user.must_change_password = True
+
+    first_name = user.full_name.split()[0] if user.full_name else "Colaborador"
+    login_url = settings.app_frontend_url or "http://localhost:3001"
+
+    email_sent = send_email(
+        to_email=user.email,
+        subject=f"Recuperacion de contraseña — {settings.smtp_from_name}",
+        title=f"Hola, {first_name}",
+        body=(
+            f"Se ha solicitado restablecer tu contraseña.\n\n"
+            f"Tu nueva contraseña temporal es: {temp_password}\n\n"
+            f"Ingresa a {login_url} y usa esta contraseña. "
+            f"El sistema te pedira cambiarla al iniciar sesion.\n\n"
+            f"Si tu no solicitaste esto, contacta a Recursos Humanos."
+        ),
+    )
+
+    audit.log(
+        actor_user_id=None,
+        action="PASSWORD_RESET_REQUESTED",
+        entity_type="user",
+        entity_id=str(user.id),
+        metadata={"email": user.email, "email_sent": email_sent, "temp_password": temp_password},
+    )
+    db.commit()
+
+    return {"message": success_msg, "email_sent": email_sent, "temp_password": temp_password if not email_sent else None}
+
+
 @router.get("/me", response_model=UserSummary)
 def me(current_user: UserSummary = Depends(get_current_user)) -> UserSummary:
     return current_user

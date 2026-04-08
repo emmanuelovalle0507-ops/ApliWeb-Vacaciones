@@ -51,6 +51,11 @@ export async function logout(): Promise<void> {
   await delay(100);
 }
 
+export async function forgotPassword(_email: string): Promise<{ message: string; email_sent: boolean; temp_password?: string | null }> {
+  await delay(800);
+  return { message: "Si el correo esta registrado, recibiras una contraseña temporal en tu bandeja de entrada.", email_sent: false, temp_password: "mock-temp-pass" };
+}
+
 // ── Me ─────────────────────────────────────────────────
 export async function getMe(userId: string): Promise<User> {
   await delay(200);

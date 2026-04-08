@@ -16,6 +16,7 @@ export const api = {
     login: impl.login,
     logout: impl.logout,
     changePassword: impl.changePassword,
+    forgotPassword: impl.forgotPassword,
   },
   me: {
     get: impl.getMe,

@@ -12,8 +12,12 @@ class AuthService:
 
     def login(self, email: str, password: str) -> TokenResponse:
         user = self.user_repo.get_by_email(email)
-        if not user or not verify_password(password, user.password_hash):
-            raise ValueError("Invalid credentials")
+        if not user:
+            raise ValueError("El correo ingresado no esta registrado en el sistema. Verifica e intenta de nuevo.")
+        if not user.is_active:
+            raise ValueError("Tu cuenta esta desactivada. Contacta al equipo de Recursos Humanos para mas informacion.")
+        if not verify_password(password, user.password_hash):
+            raise ValueError("La contraseña es incorrecta. Revisa e intenta de nuevo.")
 
         team_name = None
         if user.team_id and self.team_repo:
