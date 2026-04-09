@@ -1,10 +1,11 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.rate_limit import limiter
 from app.db.session import get_db
 from app.models.vacation_request import VacationRequestStatus
 from app.repositories.audit_repo import AuditRepository
@@ -23,7 +24,12 @@ class ProfileUpdateRequest(BaseModel):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)) -> TokenResponse:
+    # Rate limit: 5 intentos por email cada 60 segundos
+    client_ip = request.client.host if request.client else "unknown"
+    limiter.check(f"login:{payload.email.lower()}", max_requests=5, window_seconds=60)
+    limiter.check(f"login-ip:{client_ip}", max_requests=15, window_seconds=60)
+
     service = AuthService(UserRepository(db), TeamRepository(db))
     audit = AuditRepository(db)
     try:
@@ -54,7 +60,12 @@ class ForgotPasswordRequest(BaseModel):
 
 
 @router.post("/forgot-password")
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)) -> dict:
+def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)) -> dict:
+    # Rate limit: 3 intentos por email cada 120 segundos
+    client_ip = request.client.host if request.client else "unknown"
+    limiter.check(f"forgot:{payload.email.lower()}", max_requests=3, window_seconds=120)
+    limiter.check(f"forgot-ip:{client_ip}", max_requests=5, window_seconds=120)
+
     """Genera una contraseña temporal y la envía por email al usuario."""
     import secrets
     from app.core.security import hash_password

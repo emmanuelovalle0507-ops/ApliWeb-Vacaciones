@@ -1,0 +1,17 @@
+.git/
+.github/
+.windsurf/
+.vscode/
+.idea/
+docs/
+*.md
+LICENSE
+node_modules/
+.next/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+pgdata/
+docker-data/

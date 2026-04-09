@@ -1,0 +1,88 @@
+# ╔══════════════════════════════════════════════════════════╗
+# ║  SEEKOP Vacaciones — Docker Compose                     ║
+# ║                                                          ║
+# ║  Usage:                                                  ║
+# ║    docker compose up --build        (build & start all)  ║
+# ║    docker compose down              (stop all)           ║
+# ║    docker compose down -v           (stop + delete DB)   ║
+# ║    docker compose logs -f api       (tail backend logs)  ║
+# ╚══════════════════════════════════════════════════════════╝
+
+services:
+  # ── PostgreSQL ───────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: seekop_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vacation_db
+      POSTGRES_USER: vacation_user
+      POSTGRES_PASSWORD: vacation_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vacation_user -d vacation_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Backend API (FastAPI + Gunicorn) ─────────────────
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: seekop_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # App
+      APP_ENV: dev
+      APP_DEBUG: "false"
+      # Database — 'postgres' is the service name in Docker network
+      DATABASE_URL: postgresql+psycopg://vacation_user:vacation_pass@postgres:5432/vacation_db
+      # Auth
+      JWT_SECRET_KEY: docker-dev-secret-change-in-production
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      # CORS
+      CORS_ORIGINS: "http://localhost:3001,http://localhost:3000"
+      APP_FRONTEND_URL: "http://localhost:3001"
+      # LLM (optional)
+      LLM_ENABLED: "false"
+      # Pool
+      DB_POOL_SIZE: "5"
+      DB_MAX_OVERFLOW: "10"
+    ports:
+      - "8000:8000"
+    volumes:
+      - api_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Frontend (Next.js) ──────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: seekop_frontend
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_MODE: real
+      NEXT_PUBLIC_API_BASE_URL: /api/v1
+      NEXT_PUBLIC_API_BACKEND: http://api:8000
+    ports:
+      - "3001:3001"
+
+volumes:
+  postgres_data:
+  api_uploads:

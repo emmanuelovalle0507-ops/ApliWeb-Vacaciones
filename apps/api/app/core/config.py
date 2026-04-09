@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    # Database pool
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
+    db_pool_timeout: int = 30
     llm_enabled: bool = False
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"

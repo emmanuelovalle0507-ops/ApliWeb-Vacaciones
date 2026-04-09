@@ -4,6 +4,7 @@ import path from "path";
 const API_BACKEND = process.env.NEXT_PUBLIC_API_BACKEND || "http://localhost:8000";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   outputFileTracingRoot: path.join(__dirname),
   async rewrites() {
     return [
