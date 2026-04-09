@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
 from app.db.session import get_db
+from app.repositories.user_repo import UserRepository
 from app.repositories.vacation_request_repo import VacationRequestRepository
 from app.schemas.auth import UserSummary
 from app.schemas.pagination import PaginationMeta, PaginationParams
@@ -147,8 +148,6 @@ def export_ics(
     current_user: UserSummary = Depends(get_current_user),
 ):
     """Export an approved vacation request as an .ics calendar file."""
-    from app.repositories.user_repo import UserRepository
-
     repo = VacationRequestRepository(db)
     user_repo = UserRepository(db)
     item = repo.get_by_id(request_id)

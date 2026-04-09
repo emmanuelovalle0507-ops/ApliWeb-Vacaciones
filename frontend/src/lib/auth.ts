@@ -3,12 +3,36 @@ import type { User } from "@/types";
 const TOKEN_KEY = "vc_token";
 const USER_KEY = "vc_user";
 
+/** Decode JWT payload without a library (browser-safe). */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(payload);
+  } catch {
+    return null;
+  }
+}
+
+/** Check if a JWT token is expired (with 60s grace margin). */
+function isTokenExpired(token: string): boolean {
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload.exp !== "number") return true;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return payload.exp < nowSeconds - 60;
+}
+
 export function getSession(): { token: string; user: User } | null {
   if (typeof window === "undefined") return null;
   try {
     const token = localStorage.getItem(TOKEN_KEY);
     const userStr = localStorage.getItem(USER_KEY);
     if (!token || !userStr) return null;
+    if (isTokenExpired(token)) {
+      clearSession();
+      return null;
+    }
     return { token, user: JSON.parse(userStr) as User };
   } catch {
     return null;

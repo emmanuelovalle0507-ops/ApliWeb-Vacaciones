@@ -20,6 +20,11 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
+class UserCreateOut(UserOut):
+    """Response for user creation — includes email_sent flag."""
+    email_sent: bool = False
+
+
 class UserListOut(BaseModel):
     items: list[UserOut] = Field(default_factory=list)
 

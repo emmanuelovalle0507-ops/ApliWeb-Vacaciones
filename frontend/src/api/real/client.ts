@@ -298,6 +298,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     if (res.status === 401 && typeof window !== "undefined") {
       localStorage.removeItem("vc_token");
       localStorage.removeItem("vc_user");
+      // Auto-redirect to login — avoid redirect loop if already on login page
+      if (!window.location.pathname.includes("/login")) {
+        window.location.href = "/login";
+      }
       throw new Error("Sesión inválida o expirada. Inicia sesión de nuevo.");
     }
     const detail = body.detail;

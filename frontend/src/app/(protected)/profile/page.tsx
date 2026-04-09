@@ -131,7 +131,9 @@ export default function ProfilePage() {
   if (!user) return null;
 
   const rules = [
-    { label: "Mínimo 4 caracteres", met: newPassword.length >= 4 },
+    { label: "Mínimo 8 caracteres", met: newPassword.length >= 8 },
+    { label: "Al menos una mayúscula", met: /[A-Z]/.test(newPassword) },
+    { label: "Al menos un número", met: /\d/.test(newPassword) },
     { label: "Las contraseñas coinciden", met: newPassword.length > 0 && newPassword === confirmPassword },
     { label: "Diferente a la actual", met: newPassword.length > 0 && newPassword !== currentPassword },
   ];

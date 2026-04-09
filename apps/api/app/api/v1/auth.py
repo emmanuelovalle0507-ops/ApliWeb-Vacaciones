@@ -1,11 +1,14 @@
-from datetime import date
+import secrets
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import settings as app_settings
 from app.core.rate_limit import limiter
+from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.vacation_request import VacationRequestStatus
 from app.repositories.audit_repo import AuditRepository
@@ -14,6 +17,7 @@ from app.repositories.user_repo import UserRepository
 from app.repositories.vacation_request_repo import VacationRequestRepository
 from app.schemas.auth import ChangePasswordRequest, LoginRequest, TokenResponse, UserSummary
 from app.services.auth_service import AuthService
+from app.services.email_service import send_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -67,11 +71,6 @@ def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Sessio
     limiter.check(f"forgot-ip:{client_ip}", max_requests=5, window_seconds=120)
 
     """Genera una contraseña temporal y la envía por email al usuario."""
-    import secrets
-    from app.core.security import hash_password
-    from app.services.email_service import send_email
-    from app.core.config import settings
-
     user_repo = UserRepository(db)
     audit = AuditRepository(db)
     user = user_repo.get_by_email(payload.email)
@@ -91,11 +90,11 @@ def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Sessio
     user.must_change_password = True
 
     first_name = user.full_name.split()[0] if user.full_name else "Colaborador"
-    login_url = settings.app_frontend_url or "http://localhost:3001"
+    login_url = app_settings.app_frontend_url or "http://localhost:3001"
 
     email_sent = send_email(
         to_email=user.email,
-        subject=f"Recuperacion de contraseña — {settings.smtp_from_name}",
+        subject=f"Recuperacion de contraseña — {app_settings.smtp_from_name}",
         title=f"Hola, {first_name}",
         body=(
             f"Se ha solicitado restablecer tu contraseña.\n\n"
@@ -111,11 +110,11 @@ def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Sessio
         action="PASSWORD_RESET_REQUESTED",
         entity_type="user",
         entity_id=str(user.id),
-        metadata={"email": user.email, "email_sent": email_sent, "temp_password": temp_password},
+        metadata={"email": user.email, "email_sent": email_sent},
     )
     db.commit()
 
-    return {"message": success_msg, "email_sent": email_sent, "temp_password": temp_password if not email_sent else None}
+    return {"message": success_msg, "email_sent": email_sent}
 
 
 @router.get("/me", response_model=UserSummary)
@@ -205,15 +204,16 @@ def get_my_team_info(
 
     # Manager info
     manager_info = None
+    mgr_obj = None
     if user.manager_id:
-        mgr = user_repo.get_by_id(str(user.manager_id))
-        if mgr:
+        mgr_obj = user_repo.get_by_id(str(user.manager_id))
+        if mgr_obj:
             manager_info = {
-                "id": str(mgr.id),
-                "full_name": mgr.full_name,
-                "email": mgr.email,
-                "position": mgr.position,
-                "role": mgr.role.value,
+                "id": str(mgr_obj.id),
+                "full_name": mgr_obj.full_name,
+                "email": mgr_obj.email,
+                "position": mgr_obj.position,
+                "role": mgr_obj.role.value,
             }
 
     # Team members (excluding self)
@@ -230,35 +230,39 @@ def get_my_team_info(
             "role": m.role.value,
         })
 
+    # Build name cache from team members to avoid N+1 queries
+    name_cache: dict[str, str] = {str(m.id): m.full_name for m in all_members}
+    if mgr_obj:
+        name_cache[str(mgr_obj.id)] = mgr_obj.full_name
+
     # Who is on vacation right now
     approved = request_repo.list_team_approved_in_range(team_id, today, today)
     on_vacation = []
     for r in approved:
         if r.start_date <= today <= r.end_date:
-            emp = user_repo.get_by_id(str(r.employee_id))
+            emp_id = str(r.employee_id)
             on_vacation.append({
-                "id": str(r.employee_id),
-                "full_name": emp.full_name if emp else "Desconocido",
+                "id": emp_id,
+                "full_name": name_cache.get(emp_id, "Desconocido"),
                 "start_date": r.start_date.strftime("%Y-%m-%d"),
                 "end_date": r.end_date.strftime("%Y-%m-%d"),
             })
 
     # Upcoming vacations (next 30 days)
-    from datetime import timedelta
     future = today + timedelta(days=30)
     upcoming_reqs = request_repo.list_team_approved_in_range(team_id, today, future)
     upcoming = []
     seen_ids: set[str] = set()
     for r in upcoming_reqs:
-        if r.start_date > today and str(r.employee_id) not in seen_ids:
-            emp = user_repo.get_by_id(str(r.employee_id))
+        emp_id = str(r.employee_id)
+        if r.start_date > today and emp_id not in seen_ids:
             upcoming.append({
-                "id": str(r.employee_id),
-                "full_name": emp.full_name if emp else "Desconocido",
+                "id": emp_id,
+                "full_name": name_cache.get(emp_id, "Desconocido"),
                 "start_date": r.start_date.strftime("%Y-%m-%d"),
                 "end_date": r.end_date.strftime("%Y-%m-%d"),
             })
-            seen_ids.add(str(r.employee_id))
+            seen_ids.add(emp_id)
 
     return {
         "manager": manager_info,

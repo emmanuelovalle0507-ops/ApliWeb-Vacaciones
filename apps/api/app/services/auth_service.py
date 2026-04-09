@@ -59,11 +59,25 @@ class AuthService:
             must_change_password=user.must_change_password,
         )
 
+    @staticmethod
+    def validate_password_strength(password: str) -> None:
+        """Enforce minimum password complexity for production readiness."""
+        errors: list[str] = []
+        if len(password) < 8:
+            errors.append("Mínimo 8 caracteres.")
+        if not any(c.isupper() for c in password):
+            errors.append("Al menos una letra mayúscula.")
+        if not any(c.isdigit() for c in password):
+            errors.append("Al menos un número.")
+        if errors:
+            raise ValueError("Contraseña débil: " + " ".join(errors))
+
     def change_password(self, user_id: str, current_password: str, new_password: str) -> None:
         user = self.user_repo.get_by_id(user_id)
         if not user:
             raise ValueError("Usuario no encontrado.")
         if not verify_password(current_password, user.password_hash):
             raise ValueError("La contraseña actual es incorrecta.")
+        self.validate_password_strength(new_password)
         user.password_hash = hash_password(new_password)
         user.must_change_password = False

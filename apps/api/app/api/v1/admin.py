@@ -25,6 +25,7 @@ from app.schemas.admin import (
     TeamListOut,
     TeamOut,
     UserCreateIn,
+    UserCreateOut,
     UserListOut,
     UserOut,
     UserUpdateIn,
@@ -112,7 +113,7 @@ def _user_to_out(u: User, repo: UserRepository, team_repo: TeamRepository) -> Us
     )
 
 
-@router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("/users", response_model=UserCreateOut, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: AdminUserCreateIn,
     db: Session = Depends(get_db),
@@ -177,8 +178,7 @@ def create_user(
     )
 
     out = _user_to_out(user, repo, team_repo)
-    # Attach email_sent flag to response for frontend feedback
-    return {**out.model_dump(), "email_sent": email_sent}
+    return UserCreateOut(**out.model_dump(), email_sent=email_sent)
 
 
 @router.put("/users/{user_id}", response_model=UserOut)
