@@ -6,11 +6,15 @@ import { useAuth } from "@/providers/AuthProvider";
 import ErrorBoundary from "@/components/layout/ErrorBoundary";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
+import CommandPalette from "@/components/layout/CommandPalette";
+import AnnouncementPopupModal from "@/components/announcements/AnnouncementPopupModal";
+import useAnnouncementWebSocket from "@/hooks/useAnnouncementWebSocket";
 
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  useAnnouncementWebSocket();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -40,6 +44,8 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
       </div>
+      <AnnouncementPopupModal />
+      <CommandPalette />
     </div>
   );
 }

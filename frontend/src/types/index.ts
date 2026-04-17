@@ -317,10 +317,14 @@ export interface DateSuggestion {
   avg_coverage_pct: number;
   exceeds_policy: boolean;
   has_bridge: boolean;
-  colleagues_off: string[];
+  bridge_before?: number;
+  bridge_after?: number;
+  real_rest_days?: number;
+  holidays_in_range?: string[];
+  colleagues_off?: string[];
   notice_days: number;
+  score?: number;
   ai_explanation?: string;
-  ai_score?: number;
   ai_pros?: string[];
   ai_cons?: string[];
 }
@@ -330,12 +334,28 @@ export interface PolicyInfo {
   max_people_off_per_day: number;
   team_size: number;
   earliest_allowed_date: string;
+  search_horizon_days?: number;
+}
+
+export interface BalanceInfo {
+  available_days: number;
+  requested_days: number;
+  flexible_days: number;
 }
 
 export interface DateSuggestionsResponse {
   policy_info: PolicyInfo;
+  balance_info?: BalanceInfo;
   suggestions: DateSuggestion[];
   ai_powered: boolean;
+}
+
+export interface SuggestDatesParams {
+  desiredDays: number;
+  searchMonths?: number;
+  preferBridges?: boolean;
+  earliestStartDate?: string;
+  flexibleDays?: number;
 }
 
 // ── Profile / Team Info ─────────────────────────────────
@@ -359,6 +379,83 @@ export interface TeamInfo {
   team_members: TeamMemberInfo[];
   on_vacation_now: VacationPersonInfo[];
   upcoming_vacations: VacationPersonInfo[];
+}
+
+// ── Announcements ─────────────────────────────────────
+export type AnnouncementType = "GENERAL" | "URGENT" | "CELEBRATION" | "NEW_EMPLOYEE";
+export type AnnouncementStatus = "DRAFT" | "PENDING_APPROVAL" | "PUBLISHED" | "ARCHIVED";
+
+export interface ReactionSummary {
+  emoji: string;
+  count: number;
+  userNames: string[];
+}
+
+export interface Announcement {
+  id: string;
+  authorId: string | null;
+  authorName: string | null;
+  type: AnnouncementType;
+  title: string;
+  body: string;
+  isPinned: boolean;
+  isBroadcast: boolean;
+  teamIds: string[];
+  teamNames: string[];
+  expiresAt: string | null;
+  publishAt: string | null;
+  requiresAcknowledgment: boolean;
+  isAcknowledged: boolean;
+  isArchived: boolean;
+  status: AnnouncementStatus;
+  attachmentUrl: string | null;
+  attachmentName: string | null;
+  imageUrl: string | null;
+  isRead: boolean;
+  readCount: number;
+  commentCount: number;
+  reactions: ReactionSummary[];
+  myReactions: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnnouncementComment {
+  id: string;
+  announcementId: string;
+  userId: string;
+  userName: string | null;
+  body: string;
+  createdAt: string;
+}
+
+export interface AnnouncementCreatePayload {
+  type: AnnouncementType;
+  title: string;
+  body: string;
+  teamIds: string[];
+  isPinned: boolean;
+  expiresAt?: string;
+  publishAt?: string;
+  requiresAcknowledgment?: boolean;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  imageUrl?: string;
+  targetUserIds?: string[];
+}
+
+export interface AnnouncementReadUser {
+  userId: string;
+  fullName: string;
+  readAt: string | null;
+}
+
+export interface AnnouncementReadStats {
+  announcementId: string;
+  totalTargetUsers: number;
+  readCount: number;
+  readUsers: AnnouncementReadUser[];
+  unreadUsers: AnnouncementReadUser[];
 }
 
 // ── Navigation ─────────────────────────────────────────

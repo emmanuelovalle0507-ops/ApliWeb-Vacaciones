@@ -54,3 +54,6 @@ docker-data/
 
 # ─── Misc ────────────────────────────────────────────
 .windsurf/
+.claude/
+.agents/
+skills-lock.json

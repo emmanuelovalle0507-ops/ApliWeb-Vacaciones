@@ -16,6 +16,8 @@ interface RequestFormProps {
   availableDays: number;
   onSubmit: (data: CreateRequestFormData) => Promise<void>;
   onCancel: () => void;
+  initialStartDate?: string;
+  initialEndDate?: string;
 }
 
 type ValidationResult = {
@@ -26,7 +28,7 @@ type ValidationResult = {
   balanceByYear: Record<number, { requested: number; available: number }>;
 };
 
-export default function RequestForm({ availableDays, onSubmit, onCancel }: RequestFormProps) {
+export default function RequestForm({ availableDays, onSubmit, onCancel, initialStartDate, initialEndDate }: RequestFormProps) {
   const {
     register,
     handleSubmit,
@@ -36,7 +38,17 @@ export default function RequestForm({ availableDays, onSubmit, onCancel }: Reque
     setError,
   } = useForm<CreateRequestFormData>({
     resolver: zodResolver(createRequestSchema),
+    defaultValues: {
+      startDate: initialStartDate ?? "",
+      endDate: initialEndDate ?? "",
+      employeeComment: "",
+    },
   });
+
+  useEffect(() => {
+    if (initialStartDate) setValue("startDate", initialStartDate, { shouldValidate: true });
+    if (initialEndDate) setValue("endDate", initialEndDate, { shouldValidate: true });
+  }, [initialStartDate, initialEndDate, setValue]);
 
   const startDate = watch("startDate");
   const endDate = watch("endDate");

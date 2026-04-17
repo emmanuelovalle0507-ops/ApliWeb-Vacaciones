@@ -96,6 +96,18 @@ class UserRepository:
         )
         return self.db.execute(stmt).scalar_one_or_none() is not None
 
+    def list_active(self) -> list[User]:
+        stmt = select(User).where(User.is_active.is_(True)).order_by(User.full_name.asc())
+        return list(self.db.execute(stmt).scalars().all())
+
+    def list_by_team(self, team_id: str) -> list[User]:
+        stmt = (
+            select(User)
+            .where(User.team_id == team_id, User.is_active.is_(True))
+            .order_by(User.full_name.asc())
+        )
+        return list(self.db.execute(stmt).scalars().all())
+
     def list_employees_of_manager(self, manager_id: str) -> list[User]:
         stmt = (
             select(User)

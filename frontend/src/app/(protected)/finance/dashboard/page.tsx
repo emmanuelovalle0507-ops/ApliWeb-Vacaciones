@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import RoleGuard from "@/components/layout/RoleGuard";
 import {
@@ -12,6 +13,9 @@ import {
 import api from "@/api/client";
 import type { ExpenseReceipt, ExpenseReport } from "@/api/real/client";
 import { useToast } from "@/components/ui/Toast";
+import PinnedAnnouncements from "@/components/announcements/PinnedAnnouncements";
+import AnnouncementFeed from "@/components/announcements/AnnouncementFeed";
+import NewAnnouncementPopup from "@/components/announcements/NewAnnouncementPopup";
 
 const API_BASE = "/api/v1";
 
@@ -77,6 +81,9 @@ export default function FinanceDashboardPage() {
   return (
     <RoleGuard allowed={["FINANCE"]}>
       <div className="space-y-6">
+        <PinnedAnnouncements />
+        <NewAnnouncementPopup />
+
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Revisión de Gastos</h1>
@@ -722,9 +729,12 @@ function ReportDetail({ reportId, onViewReceipt }: { reportId: string; onViewRec
 function ReceiptPreviewModal({ receipt, onClose }: { receipt: ExpenseReceipt; onClose: () => void }) {
   const isImage = receipt.fileContentType.startsWith("image/");
   const confidence = receipt.extractionConfidence;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
@@ -773,6 +783,7 @@ function ReceiptPreviewModal({ receipt, onClose }: { receipt: ExpenseReceipt; on
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

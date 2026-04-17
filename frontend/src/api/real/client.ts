@@ -27,6 +27,11 @@ import type {
   ConflictAnalysis,
   DateSuggestionsResponse,
   TeamInfo,
+  Announcement,
+  AnnouncementComment,
+  AnnouncementCreatePayload,
+  AnnouncementReadStats,
+  ReactionSummary,
 } from "@/types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api/v1";
@@ -1123,8 +1128,14 @@ export async function analyzeConflict(requestId: string): Promise<ConflictAnalys
   return request<ConflictAnalysis>(`/conflict-analysis/request/${requestId}`);
 }
 
-export async function suggestDates(desiredDays: number, searchMonths: number = 3): Promise<DateSuggestionsResponse> {
-  return request<DateSuggestionsResponse>(`/conflict-analysis/suggest-dates?desired_days=${desiredDays}&search_months=${searchMonths}`);
+export async function suggestDates(params: import("@/types").SuggestDatesParams): Promise<DateSuggestionsResponse> {
+  const qs = new URLSearchParams();
+  qs.set("desired_days", String(params.desiredDays));
+  qs.set("search_months", String(params.searchMonths ?? 3));
+  if (params.preferBridges) qs.set("prefer_bridges", "true");
+  if (params.earliestStartDate) qs.set("earliest_start_date", params.earliestStartDate);
+  if (params.flexibleDays && params.flexibleDays > 0) qs.set("flexible_days", String(params.flexibleDays));
+  return request<DateSuggestionsResponse>(`/conflict-analysis/suggest-dates?${qs.toString()}`);
 }
 
 // ── Bulk Import ────────────────────────────────────────
@@ -1225,6 +1236,260 @@ export async function rollbackImport(batchId: string): Promise<BulkRollbackRespo
   return request<BulkRollbackResponse>(`/admin/employees/import-rollback/${batchId}`, { method: "POST" });
 }
 
+// ── Announcements ──────────────────────────────────────
+
+type BackendAnnouncement = {
+  id: string;
+  author_id: string | null;
+  author_name: string | null;
+  type: string;
+  title: string;
+  body: string;
+  is_pinned: boolean;
+  is_broadcast: boolean;
+  team_ids: string[];
+  team_names: string[];
+  expires_at: string | null;
+  publish_at: string | null;
+  requires_acknowledgment: boolean;
+  is_acknowledged: boolean;
+  is_archived: boolean;
+  status: string;
+  attachment_url: string | null;
+  attachment_name: string | null;
+  image_url: string | null;
+  is_read: boolean;
+  read_count: number;
+  comment_count: number;
+  reactions: { emoji: string; count: number; userNames: string[] }[];
+  my_reactions: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+function mapAnnouncement(a: BackendAnnouncement): Announcement {
+  return {
+    id: a.id,
+    authorId: a.author_id,
+    authorName: a.author_name,
+    type: a.type as Announcement["type"],
+    title: a.title,
+    body: a.body,
+    isPinned: a.is_pinned,
+    isBroadcast: a.is_broadcast,
+    teamIds: a.team_ids,
+    teamNames: a.team_names,
+    expiresAt: a.expires_at,
+    publishAt: a.publish_at,
+    requiresAcknowledgment: a.requires_acknowledgment,
+    isAcknowledged: a.is_acknowledged,
+    isArchived: a.is_archived,
+    status: a.status as Announcement["status"],
+    attachmentUrl: a.attachment_url,
+    attachmentName: a.attachment_name,
+    imageUrl: a.image_url,
+    isRead: a.is_read,
+    readCount: a.read_count,
+    commentCount: a.comment_count,
+    reactions: a.reactions ?? [],
+    myReactions: a.my_reactions ?? [],
+    createdAt: a.created_at,
+    updatedAt: a.updated_at,
+  };
+}
+
+export async function listMyAnnouncements(
+  announcementType?: string,
+  pagination?: PaginationParams,
+  showHidden?: boolean,
+): Promise<PaginatedResponse<Announcement> & { unreadCount: number }> {
+  const params = new URLSearchParams();
+  if (announcementType) params.set("type", announcementType);
+  if (pagination?.page) params.set("page", String(pagination.page));
+  if (pagination?.pageSize) params.set("page_size", String(pagination.pageSize));
+  if (showHidden) params.set("hidden", "true");
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const result = await request<{
+    items: BackendAnnouncement[];
+    unread_count: number;
+    pagination: BackendPaginationMeta;
+  }>(`/announcements/me${qs}`);
+  return {
+    items: result.items.map(mapAnnouncement),
+    unreadCount: result.unread_count,
+    pagination: mapPagination(result.pagination),
+  };
+}
+
+export async function getUnreadAnnouncementCount(): Promise<number> {
+  const result = await request<{ unread_count: number }>("/announcements/me/count");
+  return result.unread_count;
+}
+
+export async function listPinnedAnnouncements(): Promise<Announcement[]> {
+  const result = await request<BackendAnnouncement[]>("/announcements/me/pinned");
+  return result.map(mapAnnouncement);
+}
+
+export async function markAnnouncementRead(announcementId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/announcements/${announcementId}/read`, { method: "PATCH" });
+}
+
+export async function createAnnouncement(payload: AnnouncementCreatePayload): Promise<Announcement> {
+  const result = await request<BackendAnnouncement>("/announcements", {
+    method: "POST",
+    body: JSON.stringify({
+      type: payload.type,
+      title: payload.title,
+      body: payload.body,
+      team_ids: payload.teamIds,
+      is_pinned: payload.isPinned,
+      expires_at: payload.expiresAt ?? null,
+      publish_at: payload.publishAt ?? null,
+      requires_acknowledgment: payload.requiresAcknowledgment ?? false,
+      attachment_url: payload.attachmentUrl ?? null,
+      attachment_name: payload.attachmentName ?? null,
+      image_url: payload.imageUrl ?? null,
+      target_user_ids: payload.targetUserIds ?? null,
+    }),
+  });
+  return mapAnnouncement(result);
+}
+
+export async function uploadAnnouncementImage(file: File): Promise<{ url: string; fileName: string }> {
+  const token = getToken();
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${BASE_URL}/announcements/upload-image`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === "string" ? body.detail : "Error al subir imagen");
+  }
+  const data = await res.json();
+  return { url: data.url, fileName: data.file_name };
+}
+
+export async function dismissAnnouncement(announcementId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/announcements/${announcementId}/dismiss`, { method: "PATCH" });
+}
+
+export async function undismissAnnouncement(announcementId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/announcements/${announcementId}/undismiss`, { method: "PATCH" });
+}
+
+export async function deleteAnnouncement(announcementId: string): Promise<void> {
+  await request<void>(`/announcements/${announcementId}`, { method: "DELETE" });
+}
+
+export async function toggleAnnouncementPin(announcementId: string): Promise<Announcement> {
+  const result = await request<BackendAnnouncement>(`/announcements/${announcementId}/pin`, {
+    method: "PATCH",
+  });
+  return mapAnnouncement(result);
+}
+
+export async function getAnnouncementStats(announcementId: string): Promise<AnnouncementReadStats> {
+  const result = await request<{
+    announcement_id: string;
+    total_target_users: number;
+    read_count: number;
+    read_users: Array<{ user_id: string; full_name: string; read_at: string | null }>;
+    unread_users: Array<{ user_id: string; full_name: string; read_at: string | null }>;
+  }>(`/announcements/${announcementId}/stats`);
+  return {
+    announcementId: result.announcement_id,
+    totalTargetUsers: result.total_target_users,
+    readCount: result.read_count,
+    readUsers: result.read_users.map((u) => ({ userId: u.user_id, fullName: u.full_name, readAt: u.read_at })),
+    unreadUsers: result.unread_users.map((u) => ({ userId: u.user_id, fullName: u.full_name, readAt: u.read_at })),
+  };
+}
+
+// ── Reactions ──────────────────────────────────────────
+export async function toggleAnnouncementReaction(announcementId: string, emoji: string): Promise<{ reactions: ReactionSummary[] }> {
+  const result = await request<{ reactions: { emoji: string; count: number; userNames: string[] }[] }>(
+    `/announcements/${announcementId}/reactions`,
+    { method: "POST", body: JSON.stringify({ emoji }) }
+  );
+  return { reactions: result.reactions };
+}
+
+// ── Comments ──────────────────────────────────────────
+export async function listAnnouncementComments(announcementId: string): Promise<AnnouncementComment[]> {
+  const result = await request<{ id: string; announcement_id: string; user_id: string; user_name: string | null; body: string; created_at: string }[]>(
+    `/announcements/${announcementId}/comments`
+  );
+  return result.map(c => ({
+    id: c.id,
+    announcementId: c.announcement_id,
+    userId: c.user_id,
+    userName: c.user_name,
+    body: c.body,
+    createdAt: c.created_at,
+  }));
+}
+
+export async function addAnnouncementComment(announcementId: string, body: string): Promise<AnnouncementComment> {
+  const c = await request<{ id: string; announcement_id: string; user_id: string; user_name: string | null; body: string; created_at: string }>(
+    `/announcements/${announcementId}/comments`,
+    { method: "POST", body: JSON.stringify({ body }) }
+  );
+  return { id: c.id, announcementId: c.announcement_id, userId: c.user_id, userName: c.user_name, body: c.body, createdAt: c.created_at };
+}
+
+export async function deleteAnnouncementComment(commentId: string): Promise<void> {
+  await request<void>(`/announcements/comments/${commentId}`, { method: "DELETE" });
+}
+
+// ── Acknowledge ──────────────────────────────────────
+export async function acknowledgeAnnouncement(announcementId: string): Promise<void> {
+  await request<{ ok: boolean }>(`/announcements/${announcementId}/acknowledge`, { method: "PATCH" });
+}
+
+// ── Archive ─────────────────────────────────────────
+export async function archiveAnnouncement(announcementId: string): Promise<Announcement> {
+  const result = await request<BackendAnnouncement>(`/announcements/${announcementId}/archive`, { method: "PATCH" });
+  return mapAnnouncement(result);
+}
+
+export async function unarchiveAnnouncement(announcementId: string): Promise<Announcement> {
+  const result = await request<BackendAnnouncement>(`/announcements/${announcementId}/unarchive`, { method: "PATCH" });
+  return mapAnnouncement(result);
+}
+
+// ── Approval ────────────────────────────────────────
+export async function listPendingApprovalAnnouncements(): Promise<Announcement[]> {
+  const result = await request<BackendAnnouncement[]>("/announcements/pending-approval");
+  return result.map(mapAnnouncement);
+}
+
+export async function approveAnnouncement(announcementId: string): Promise<Announcement> {
+  const result = await request<BackendAnnouncement>(`/announcements/${announcementId}/approve`, { method: "PATCH" });
+  return mapAnnouncement(result);
+}
+
+export async function rejectAnnouncement(announcementId: string): Promise<void> {
+  await request<void>(`/announcements/${announcementId}/reject`, { method: "DELETE" });
+}
+
+// ── New since (popup) ───────────────────────────────
+export async function listNewSinceAnnouncements(since: string): Promise<Announcement[]> {
+  const result = await request<BackendAnnouncement[]>(
+    `/announcements/me/new-since?since=${encodeURIComponent(since)}`,
+  );
+  return result.map(mapAnnouncement);
+}
+
+// ── Search ──────────────────────────────────────────
+export async function searchAnnouncements(query: string): Promise<Announcement[]> {
+  const result = await request<BackendAnnouncement[]>(`/announcements/search?q=${encodeURIComponent(query)}`);
+  return result.map(mapAnnouncement);
+}
+
 // ── Calendar Export (ICS) ──────────────────────────────
 export async function exportICS(requestId: string): Promise<string> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -1247,4 +1512,53 @@ export async function exportICS(requestId: string): Promise<string> {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
   return text;
+}
+
+// ── Admin insights ─────────────────────────────────────────────────
+export interface AdminStats {
+  active_users: number;
+  total_users: number;
+  pending_requests: number;
+  approved_this_month: number;
+  utilization_pct: number;
+  total_granted_days: number;
+  total_used_days: number;
+  finance_pending: number;
+  new_hires_month: number;
+  year: number;
+}
+
+export interface HealthComponent {
+  name: string;
+  status: "healthy" | "down" | "warning" | "disabled";
+  detail: string;
+}
+
+export interface AdminHealth {
+  overall: "healthy" | "degraded" | "warning";
+  env: string;
+  checked_at: string;
+  components: HealthComponent[];
+}
+
+export interface ActivityFeedItem {
+  id: number;
+  action: string;
+  entity_type: string;
+  entity_id: string;
+  actor_name: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  return request<AdminStats>("/admin/stats");
+}
+
+export async function getAdminHealth(): Promise<AdminHealth> {
+  return request<AdminHealth>("/admin/health");
+}
+
+export async function getAdminActivityFeed(limit = 20): Promise<{ items: ActivityFeedItem[] }> {
+  return request<{ items: ActivityFeedItem[] }>(`/admin/activity-feed?limit=${limit}`);
 }

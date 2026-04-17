@@ -2,10 +2,12 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Menu, UserCircle, Lock, LogOut, ChevronDown } from "lucide-react";
+import { Menu, UserCircle, Lock, LogOut, ChevronDown, Megaphone } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/AuthProvider";
 import { ROLE_LABELS } from "@/types";
 import NotificationPanel from "@/components/notifications/NotificationPanel";
+import api from "@/api/client";
 
 interface TopbarProps {
   onMenuClick: () => void;
@@ -56,51 +58,61 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
   ];
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 sm:px-6 bg-white border-b border-gray-200">
+    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 sm:px-6 bg-white/95 backdrop-blur-sm border-b border-slate-200/60 shadow-[0_1px_3px_0_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-3">
         <button
           onClick={onMenuClick}
-          className="lg:hidden p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          className="lg:hidden p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
         >
           <Menu size={22} />
         </button>
         <div className="hidden lg:block">
-          <h2 className="text-sm font-medium text-gray-500">
-            Bienvenido, <span className="text-gray-900 font-semibold">{user?.fullName}</span>
+          <h2 className="text-sm font-medium text-slate-400">
+            Bienvenido, <span className="text-slate-800 font-semibold">{user?.fullName}</span>
           </h2>
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
+        <AnnouncementBadge />
         <NotificationPanel />
 
-        {/* User dropdown */}
+        {/* User dropdown — desktop (with text) */}
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="hidden sm:flex items-center gap-3 pl-4 border-l border-gray-200 hover:opacity-80 transition-opacity cursor-pointer"
+            className="hidden sm:flex items-center gap-3 pl-2 pr-3 py-1.5 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+            title="Cuenta"
           >
-            <div className="text-right">
-              <p className="text-sm font-medium text-gray-700">{user?.fullName}</p>
-              <p className="text-xs text-gray-400">{user ? ROLE_LABELS[user.role] : ""} · {user?.area.name}</p>
+            <div className="flex flex-col items-end leading-tight">
+              <span className="text-sm font-semibold text-slate-800 truncate max-w-[160px]">
+                {user?.fullName}
+              </span>
+              <span className="text-xs text-slate-500 truncate max-w-[160px]">
+                {user ? ROLE_LABELS[user.role] : ""} · {user?.area.name}
+              </span>
             </div>
             <div className="flex items-center justify-center w-9 h-9 rounded-full bg-seekop-500 text-white text-sm font-bold shadow-sm ring-2 ring-seekop-100/70">
               {initials}
             </div>
-            <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`} />
+            <ChevronDown
+              size={16}
+              className={`text-slate-400 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
+            />
           </button>
 
-          {/* Mobile avatar button */}
+          {/* Mobile avatar — opens same dropdown */}
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="sm:hidden flex items-center justify-center w-9 h-9 rounded-full bg-seekop-500 text-white text-sm font-bold"
+            className="sm:hidden flex items-center justify-center w-9 h-9 rounded-full bg-seekop-500 text-white text-sm font-bold shadow-sm ring-2 ring-seekop-100/70 cursor-pointer"
+            title="Cuenta"
           >
             {initials}
           </button>
 
           {/* Dropdown menu */}
           {dropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50 animate-[fadeIn_0.15s_ease]">
+            <div className="absolute right-0 top-full mt-2 w-56 max-w-[calc(100vw-1rem)] bg-white rounded-xl shadow-lg border border-gray-100 py-1.5 z-50 animate-[fadeIn_0.15s_ease]">
               {/* User info header */}
               <div className="px-4 py-3 border-b border-gray-100">
                 <p className="text-sm font-semibold text-gray-900 truncate">{user?.fullName}</p>
@@ -109,7 +121,7 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
               {/* Menu items */}
               <div className="py-1.5">
-                {menuItems.map((item, i) => (
+                {menuItems.map((item) => (
                   <React.Fragment key={item.label}>
                     {item.danger && <div className="my-1.5 border-t border-gray-100" />}
                     <button
@@ -131,5 +143,29 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         </div>
       </div>
     </header>
+  );
+}
+
+function AnnouncementBadge() {
+  const { user } = useAuth();
+  const { data: count = 0 } = useQuery({
+    queryKey: ["announcements.unreadCount", user?.id],
+    queryFn: () => api.announcements.getUnreadCount(),
+    enabled: !!user,
+    refetchInterval: 30000,
+  });
+
+  return (
+    <button
+      className="relative p-2 text-gray-500 hover:text-seekop-600 hover:bg-seekop-50 rounded-lg transition-colors"
+      title="Anuncios del equipo"
+    >
+      <Megaphone size={20} />
+      {count > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold bg-red-500 text-white rounded-full">
+          {count > 9 ? "9+" : count}
+        </span>
+      )}
+    </button>
   );
 }

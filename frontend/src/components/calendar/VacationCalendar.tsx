@@ -2,17 +2,44 @@
 
 import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Loader2, Calendar as CalendarIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Calendar as CalendarIcon, Users, CheckCircle2, Clock4, X } from "lucide-react";
 import api from "@/api/client";
 import type { CalendarEvent } from "@/types";
 import { getMexicanHolidays } from "@/lib/holidays";
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
-const STATUS_STYLES: Record<string, { bg: string; border: string; text: string; dot: string }> = {
-  APPROVED: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", dot: "bg-emerald-500" },
-  PENDING: { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", dot: "bg-amber-500" },
+const STATUS_STYLES = {
+  APPROVED: {
+    bar: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    dot: "bg-emerald-500",
+    avatar: "bg-emerald-500",
+    badge: "bg-emerald-100 text-emerald-700",
+    card: "bg-emerald-50 border-emerald-200",
+    label: "Aprobada",
+  },
+  PENDING: {
+    bar: "bg-amber-100 text-amber-800 border-amber-200",
+    dot: "bg-amber-400",
+    avatar: "bg-amber-400",
+    badge: "bg-amber-100 text-amber-700",
+    card: "bg-amber-50 border-amber-200",
+    label: "Pendiente",
+  },
 };
+
+const HOLIDAY_NAMES: Record<string, string> = {};
+function getHolidayName(dateStr: string): string | undefined {
+  const year = parseInt(dateStr.substring(0, 4), 10);
+  const key = `${year}`;
+  if (!HOLIDAY_NAMES[key + "-loaded"]) {
+    const holidays = getMexicanHolidays(year);
+    const names = ["Año Nuevo", "Día de la Constitución", "Natalicio de Benito Juárez", "Día del Trabajo", "Día de la Independencia", "Revolución Mexicana", "Navidad"];
+    holidays.forEach((h, i) => { HOLIDAY_NAMES[h] = names[i]; });
+    HOLIDAY_NAMES[key + "-loaded"] = "1";
+  }
+  return HOLIDAY_NAMES[dateStr];
+}
 
 function formatMonthLabel(year: number, month: number): string {
   const d = new Date(year, month - 1, 1);
@@ -22,6 +49,21 @@ function formatMonthLabel(year: number, month: number): string {
 
 function getMonthKey(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(" ");
+  if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? "?";
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function formatDateRange(start: string, end: string): string {
+  const s = new Date(start + "T12:00:00");
+  const e = new Date(end + "T12:00:00");
+  if (start === end) return s.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+  if (s.getMonth() === e.getMonth())
+    return `${s.getDate()} – ${e.toLocaleDateString("es-MX", { day: "numeric", month: "short" })}`;
+  return `${s.toLocaleDateString("es-MX", { day: "numeric", month: "short" })} – ${e.toLocaleDateString("es-MX", { day: "numeric", month: "short" })}`;
 }
 
 interface DayCellData {
@@ -35,27 +77,6 @@ interface DayCellData {
   events: CalendarEvent[];
 }
 
-const HOLIDAY_NAMES: Record<string, string> = {};
-function getHolidayName(dateStr: string): string | undefined {
-  const year = parseInt(dateStr.substring(0, 4), 10);
-  const key = `${year}`;
-  if (!HOLIDAY_NAMES[key + "-loaded"]) {
-    const holidays = getMexicanHolidays(year);
-    const names = [
-      "A\u00f1o Nuevo",
-      "D\u00eda de la Constituci\u00f3n",
-      "Natalicio de Benito Ju\u00e1rez",
-      "D\u00eda del Trabajo",
-      "D\u00eda de la Independencia",
-      "Revoluci\u00f3n Mexicana",
-      "Navidad",
-    ];
-    holidays.forEach((h, i) => { HOLIDAY_NAMES[h] = names[i]; });
-    HOLIDAY_NAMES[key + "-loaded"] = "1";
-  }
-  return HOLIDAY_NAMES[dateStr];
-}
-
 function buildGrid(year: number, month: number, events: CalendarEvent[]): DayCellData[][] {
   const firstDay = new Date(year, month - 1, 1);
   const lastDay = new Date(year, month, 0).getDate();
@@ -63,87 +84,44 @@ function buildGrid(year: number, month: number, events: CalendarEvent[]): DayCel
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const holidaySet = new Set(getMexicanHolidays(year));
 
-  // Monday=0 based start offset
   let startOffset = firstDay.getDay() - 1;
   if (startOffset < 0) startOffset = 6;
 
   const cells: DayCellData[] = [];
 
-  // Previous month padding
   const prevMonthLastDay = new Date(year, month - 1, 0).getDate();
   for (let i = startOffset - 1; i >= 0; i--) {
     const d = prevMonthLastDay - i;
     const prevM = month - 1 <= 0 ? 12 : month - 1;
     const prevY = month - 1 <= 0 ? year - 1 : year;
     const dateStr = `${prevY}-${String(prevM).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    const dayOfWeek = cells.length % 7;
-    cells.push({
-      day: d,
-      isCurrentMonth: false,
-      isToday: false,
-      isWeekend: dayOfWeek >= 5,
-      isHoliday: false,
-      dateStr,
-      events: [],
-    });
+    cells.push({ day: d, isCurrentMonth: false, isToday: false, isWeekend: cells.length % 7 >= 5, isHoliday: false, dateStr, events: [] });
   }
 
-  // Current month
   for (let d = 1; d <= lastDay; d++) {
     const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
     const dayOfWeek = cells.length % 7;
     const dayEvents = events.filter((e) => e.startDate <= dateStr && e.endDate >= dateStr);
     cells.push({
-      day: d,
-      isCurrentMonth: true,
-      isToday: dateStr === todayStr,
-      isWeekend: dayOfWeek >= 5,
-      isHoliday: holidaySet.has(dateStr),
-      holidayName: getHolidayName(dateStr),
-      dateStr,
-      events: dayEvents,
+      day: d, isCurrentMonth: true, isToday: dateStr === todayStr,
+      isWeekend: dayOfWeek >= 5, isHoliday: holidaySet.has(dateStr),
+      holidayName: getHolidayName(dateStr), dateStr, events: dayEvents,
     });
   }
 
-  // Next month padding
   const remaining = 7 - (cells.length % 7);
   if (remaining < 7) {
     for (let d = 1; d <= remaining; d++) {
       const nextM = month + 1 > 12 ? 1 : month + 1;
       const nextY = month + 1 > 12 ? year + 1 : year;
       const dateStr = `${nextY}-${String(nextM).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      const dayOfWeek = cells.length % 7;
-      cells.push({
-        day: d,
-        isCurrentMonth: false,
-        isToday: false,
-        isWeekend: dayOfWeek >= 5,
-        isHoliday: false,
-        dateStr,
-        events: [],
-      });
+      cells.push({ day: d, isCurrentMonth: false, isToday: false, isWeekend: cells.length % 7 >= 5, isHoliday: false, dateStr, events: [] });
     }
   }
 
-  // Split into weeks
   const weeks: DayCellData[][] = [];
-  for (let i = 0; i < cells.length; i += 7) {
-    weeks.push(cells.slice(i, i + 7));
-  }
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   return weeks;
-}
-
-function EventPill({ event }: { event: CalendarEvent }) {
-  const styles = STATUS_STYLES[event.status] ?? STATUS_STYLES.PENDING;
-  return (
-    <div
-      className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] leading-tight truncate ${styles.bg} ${styles.text} border ${styles.border}`}
-      title={`${event.employeeName} — ${event.status === "APPROVED" ? "Aprobada" : "Pendiente"}`}
-    >
-      <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${styles.dot}`} />
-      <span className="truncate">{event.employeeName.split(" ")[0]}</span>
-    </div>
-  );
 }
 
 interface VacationCalendarProps {
@@ -158,7 +136,6 @@ export default function VacationCalendar({ teamId, title = "Calendario de Vacaci
   const [selectedDay, setSelectedDay] = useState<DayCellData | null>(null);
 
   const monthKey = getMonthKey(year, month);
-
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["calendar", monthKey, teamId],
     queryFn: () => api.calendar.getEvents(monthKey, teamId),
@@ -167,77 +144,98 @@ export default function VacationCalendar({ teamId, title = "Calendario de Vacaci
   const weeks = useMemo(() => buildGrid(year, month, events), [year, month, events]);
 
   const goPrev = () => {
-    if (month === 1) { setYear((y) => y - 1); setMonth(12); }
-    else setMonth((m) => m - 1);
+    if (month === 1) { setYear((y) => y - 1); setMonth(12); } else setMonth((m) => m - 1);
     setSelectedDay(null);
   };
-
   const goNext = () => {
-    if (month === 12) { setYear((y) => y + 1); setMonth(1); }
-    else setMonth((m) => m + 1);
+    if (month === 12) { setYear((y) => y + 1); setMonth(1); } else setMonth((m) => m + 1);
     setSelectedDay(null);
   };
+  const goToday = () => { setYear(now.getFullYear()); setMonth(now.getMonth() + 1); setSelectedDay(null); };
 
-  const goToday = () => {
-    setYear(now.getFullYear());
-    setMonth(now.getMonth() + 1);
-    setSelectedDay(null);
-  };
-
-  // Stats
   const approvedCount = events.filter((e) => e.status === "APPROVED").length;
   const pendingCount = events.filter((e) => e.status === "PENDING").length;
   const uniqueEmployees = new Set(events.map((e) => e.employeeId)).size;
 
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
+
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-seekop-50 text-seekop-600">
-            <CalendarIcon size={20} />
+    <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+
+      {/* ── Header ── */}
+      <div className="bg-gradient-to-br from-slate-800 via-slate-800 to-slate-700 px-5 py-4">
+        <div className="flex items-center justify-between gap-3">
+          {/* Title + stats */}
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 shrink-0 rounded-xl bg-white/10 flex items-center justify-center text-white">
+              <CalendarIcon size={17} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-white leading-tight truncate">{title}</h3>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {approvedCount > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded-full">
+                    <CheckCircle2 size={9} /> {approvedCount} aprobada{approvedCount !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {pendingCount > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full">
+                    <Clock4 size={9} /> {pendingCount} pendiente{pendingCount !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {uniqueEmployees > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white/10 text-slate-300 px-1.5 py-0.5 rounded-full">
+                    <Users size={9} /> {uniqueEmployees} persona{uniqueEmployees !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {events.length === 0 && !isLoading && (
+                  <span className="text-[10px] text-slate-400">Sin eventos este mes</span>
+                )}
+              </div>
+            </div>
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {approvedCount} aprobadas · {pendingCount} pendientes · {uniqueEmployees} persona{uniqueEmployees !== 1 ? "s" : ""}
-            </p>
+
+          {/* Navigation */}
+          <div className="flex items-center gap-1 shrink-0">
+            {!isCurrentMonth && (
+              <button
+                onClick={goToday}
+                className="hidden sm:block px-2.5 py-1.5 text-xs font-medium text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-all border border-white/10 hover:border-white/20 mr-1"
+              >
+                Hoy
+              </button>
+            )}
+            <button onClick={goPrev} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/60 hover:text-white">
+              <ChevronLeft size={18} />
+            </button>
+            <span className="min-w-[130px] text-center text-sm font-bold text-white tracking-tight">
+              {formatMonthLabel(year, month)}
+            </span>
+            <button onClick={goNext} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors text-white/60 hover:text-white">
+              <ChevronRight size={18} />
+            </button>
           </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={goToday}
-            className="px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-          >
-            Hoy
-          </button>
-          <button onClick={goPrev} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors text-gray-500">
-            <ChevronLeft size={18} />
-          </button>
-          <span className="min-w-[140px] text-center text-sm font-semibold text-gray-800">
-            {formatMonthLabel(year, month)}
-          </span>
-          <button onClick={goNext} className="p-1.5 hover:bg-gray-100 rounded-md transition-colors text-gray-500">
-            <ChevronRight size={18} />
-          </button>
         </div>
       </div>
 
-      {/* Calendar grid */}
+      {/* ── Grid ── */}
       <div className="relative">
         {isLoading && (
-          <div className="absolute inset-0 bg-white/70 flex items-center justify-center z-10">
-            <Loader2 size={24} className="text-seekop-500 animate-spin" />
+          <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10 rounded-b-2xl">
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 size={22} className="text-seekop-500 animate-spin" />
+              <span className="text-xs text-slate-400">Cargando...</span>
+            </div>
           </div>
         )}
 
         {/* Weekday headers */}
-        <div className="grid grid-cols-7 border-b border-gray-100">
+        <div className="grid grid-cols-7 bg-slate-50 border-b border-slate-100">
           {WEEKDAYS.map((wd, i) => (
             <div
               key={wd}
-              className={`text-center text-[11px] font-semibold uppercase tracking-wider py-2 ${
-                i >= 5 ? "text-gray-400 bg-gray-50/50" : "text-gray-500"
+              className={`text-center text-[11px] font-bold uppercase tracking-widest py-2.5 ${
+                i >= 5 ? "text-slate-400" : "text-slate-500"
               }`}
             >
               {wd}
@@ -246,50 +244,79 @@ export default function VacationCalendar({ teamId, title = "Calendario de Vacaci
         </div>
 
         {/* Weeks */}
-        <div className="divide-y divide-gray-50">
+        <div className="divide-y divide-slate-100">
           {weeks.map((week, wi) => (
-            <div key={wi} className="grid grid-cols-7 divide-x divide-gray-50">
+            <div key={wi} className="grid grid-cols-7 divide-x divide-slate-100">
               {week.map((cell) => {
                 const hasEvents = cell.events.length > 0;
                 const isSelected = selectedDay?.dateStr === cell.dateStr;
+                const isClickable = (hasEvents || cell.isHoliday) && cell.isCurrentMonth;
+
                 return (
                   <button
                     key={cell.dateStr}
-                    onClick={() => (hasEvents || cell.isHoliday) && cell.isCurrentMonth ? setSelectedDay(isSelected ? null : cell) : undefined}
+                    onClick={() => isClickable ? setSelectedDay(isSelected ? null : cell) : undefined}
                     title={cell.isHoliday && cell.holidayName ? cell.holidayName : undefined}
-                    className={`relative min-h-[80px] p-1.5 text-left transition-colors ${
-                      cell.isCurrentMonth ? "" : "opacity-30"
-                    } ${cell.isWeekend ? "bg-gray-50/50" : ""} ${
-                      cell.isHoliday && cell.isCurrentMonth ? "bg-red-50/60" : ""
-                    } ${
-                      cell.isToday ? "ring-2 ring-inset ring-seekop-400" : ""
-                    } ${isSelected ? "bg-blue-50" : (hasEvents || cell.isHoliday) && cell.isCurrentMonth ? "hover:bg-gray-50 cursor-pointer" : "cursor-default"}`}
+                    className={[
+                      "relative min-h-[60px] sm:min-h-[90px] p-1.5 sm:p-2 text-left flex flex-col transition-colors",
+                      !cell.isCurrentMonth ? "opacity-25" : "",
+                      cell.isWeekend && cell.isCurrentMonth ? "bg-slate-50/70" : "",
+                      cell.isHoliday && cell.isCurrentMonth ? "bg-red-50/70" : "",
+                      isSelected ? "bg-seekop-50 ring-2 ring-inset ring-seekop-300" : "",
+                      !isSelected && cell.isToday ? "ring-2 ring-inset ring-seekop-400" : "",
+                      isClickable && !isSelected ? "hover:bg-slate-50 cursor-pointer" : "cursor-default",
+                    ].filter(Boolean).join(" ")}
                   >
+                    {/* Day number */}
                     <span
-                      className={`inline-flex items-center justify-center w-6 h-6 text-xs rounded-full ${
+                      className={[
+                        "inline-flex items-center justify-center w-6 h-6 text-xs rounded-full font-semibold mb-0.5 self-end",
                         cell.isToday
-                          ? "bg-seekop-600 text-white font-bold"
+                          ? "bg-seekop-600 text-white shadow-sm shadow-seekop-300"
                           : cell.isHoliday && cell.isCurrentMonth
-                          ? "bg-red-100 text-red-600 font-bold"
+                          ? "text-red-500"
                           : cell.isCurrentMonth
-                          ? "text-gray-700 font-medium"
-                          : "text-gray-300"
-                      }`}
+                          ? isSelected ? "text-seekop-700 font-bold" : "text-slate-700"
+                          : "text-slate-300",
+                      ].filter(Boolean).join(" ")}
                     >
                       {cell.day}
                     </span>
+
+                    {/* Holiday label */}
                     {cell.isHoliday && cell.isCurrentMonth && (
-                      <div className="mt-0.5 px-1.5 py-0.5 rounded text-[9px] leading-tight truncate bg-red-100 text-red-600 border border-red-200 font-medium">
+                      <div className="hidden sm:block px-1.5 py-0.5 rounded text-[9px] leading-tight truncate bg-red-100 text-red-500 font-semibold mb-0.5 border border-red-100">
                         {cell.holidayName ?? "Feriado"}
                       </div>
                     )}
+                    {cell.isHoliday && cell.isCurrentMonth && (
+                      <div className="sm:hidden w-1.5 h-1.5 rounded-full bg-red-400 mb-0.5" />
+                    )}
+
+                    {/* Events */}
                     {cell.isCurrentMonth && cell.events.length > 0 && (
-                      <div className="mt-0.5 space-y-0.5 overflow-hidden max-h-[48px]">
-                        {cell.events.slice(0, 3).map((ev) => (
-                          <EventPill key={ev.requestId} event={ev} />
-                        ))}
-                        {cell.events.length > 3 && (
-                          <span className="text-[10px] text-gray-400 pl-1">+{cell.events.length - 3} más</span>
+                      <div className="flex flex-col gap-0.5 mt-auto w-full overflow-hidden">
+                        {cell.events.slice(0, 2).map((ev) => {
+                          const st = STATUS_STYLES[ev.status] ?? STATUS_STYLES.PENDING;
+                          const initials = getInitials(ev.employeeName);
+                          const firstName = ev.employeeName.split(" ")[0];
+                          return (
+                            <div
+                              key={ev.requestId}
+                              className={`flex items-center gap-1 px-1 sm:px-1.5 py-0.5 rounded border text-[10px] leading-tight w-full ${st.bar}`}
+                              title={ev.employeeName}
+                            >
+                              <span className={`shrink-0 w-3.5 h-3.5 rounded-full ${st.avatar} text-white text-[8px] font-bold flex items-center justify-center`}>
+                                {initials[0]}
+                              </span>
+                              <span className="truncate hidden sm:block font-medium">{firstName}</span>
+                            </div>
+                          );
+                        })}
+                        {cell.events.length > 2 && (
+                          <span className="text-[9px] text-slate-400 font-medium pl-0.5">
+                            +{cell.events.length - 2}
+                          </span>
                         )}
                       </div>
                     )}
@@ -301,68 +328,84 @@ export default function VacationCalendar({ teamId, title = "Calendario de Vacaci
         </div>
       </div>
 
-      {/* Day detail panel */}
-      {selectedDay && selectedDay.events.length > 0 && (
-        <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/50">
+      {/* ── Selected day panel ── */}
+      {selectedDay && (
+        <div className="border-t border-slate-100 bg-gradient-to-b from-slate-50 to-white px-4 sm:px-5 py-4">
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-gray-800">
-              {new Date(selectedDay.dateStr + "T12:00:00").toLocaleDateString("es-MX", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })}
-            </h4>
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-seekop-100 flex items-center justify-center">
+                <CalendarIcon size={13} className="text-seekop-600" />
+              </div>
+              <h4 className="text-sm font-bold text-slate-800 capitalize">
+                {new Date(selectedDay.dateStr + "T12:00:00").toLocaleDateString("es-MX", {
+                  weekday: "long", day: "numeric", month: "long",
+                })}
+              </h4>
+              {selectedDay.isHoliday && selectedDay.holidayName && (
+                <span className="text-[10px] font-semibold bg-red-100 text-red-500 px-1.5 py-0.5 rounded-full border border-red-100">
+                  {selectedDay.holidayName}
+                </span>
+              )}
+            </div>
             <button
               onClick={() => setSelectedDay(null)}
-              className="text-xs text-gray-400 hover:text-gray-600"
+              className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
             >
-              Cerrar
+              <X size={14} />
             </button>
           </div>
-          <div className="space-y-2">
-            {selectedDay.events.map((ev) => {
-              const styles = STATUS_STYLES[ev.status] ?? STATUS_STYLES.PENDING;
-              return (
-                <div
-                  key={ev.requestId}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg border ${styles.bg} ${styles.border}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${styles.dot}`} />
-                    <span className={`text-sm font-medium ${styles.text}`}>{ev.employeeName}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className={`text-xs ${styles.text}`}>
-                      {ev.startDate} → {ev.endDate}
+
+          {selectedDay.events.length > 0 ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {selectedDay.events.map((ev) => {
+                const st = STATUS_STYLES[ev.status] ?? STATUS_STYLES.PENDING;
+                const initials = getInitials(ev.employeeName);
+                return (
+                  <div
+                    key={ev.requestId}
+                    className={`flex items-center gap-3 p-3 rounded-xl border bg-white shadow-sm ${st.card}`}
+                  >
+                    <div className={`w-9 h-9 rounded-full ${st.avatar} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
+                      {initials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{ev.employeeName}</p>
+                      <p className="text-xs text-slate-400">{formatDateRange(ev.startDate, ev.endDate)}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${st.badge}`}>
+                      {st.label}
                     </span>
-                    <span className={`ml-2 text-[10px] font-semibold uppercase ${styles.text}`}>
-                      {ev.status === "APPROVED" ? "Aprobada" : "Pendiente"}
-                    </span>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400">
+              {selectedDay.isHoliday ? "Día festivo, sin vacaciones programadas." : "Sin vacaciones este día."}
+            </p>
+          )}
         </div>
       )}
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 px-5 py-3 border-t border-gray-100 bg-gray-50/30">
+      {/* ── Legend ── */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-5 py-3 border-t border-slate-100 bg-white">
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-          <span className="text-[11px] text-gray-500">Aprobada</span>
+          <span className="w-2.5 h-2.5 rounded-sm bg-emerald-400" />
+          <span className="text-[11px] font-medium text-slate-400">Aprobada</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-          <span className="text-[11px] text-gray-500">Pendiente</span>
+          <span className="w-2.5 h-2.5 rounded-sm bg-amber-400" />
+          <span className="text-[11px] font-medium text-slate-400">Pendiente</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-          <span className="text-[11px] text-gray-500">Feriado</span>
+          <span className="w-2.5 h-2.5 rounded-sm bg-red-300" />
+          <span className="text-[11px] font-medium text-slate-400">Feriado</span>
         </div>
         <div className="flex items-center gap-1.5 ml-auto">
-          <div className="w-4 h-4 rounded ring-2 ring-seekop-400" />
-          <span className="text-[11px] text-gray-500">Hoy</span>
+          <span className="w-4 h-4 rounded-full bg-seekop-600 flex items-center justify-center text-white text-[8px] font-bold">
+            {now.getDate()}
+          </span>
+          <span className="text-[11px] font-medium text-slate-400">Hoy</span>
         </div>
       </div>
     </div>

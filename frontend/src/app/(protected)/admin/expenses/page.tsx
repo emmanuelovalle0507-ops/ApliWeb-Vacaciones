@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import RoleGuard from "@/components/layout/RoleGuard";
 import {
@@ -354,9 +355,12 @@ function ReportDetailPanel({ report, onViewReceipt }: { report: ExpenseReport; o
 function ReceiptPreviewModal({ receipt, onClose }: { receipt: ExpenseReceipt; onClose: () => void }) {
   const isImage = receipt.fileContentType.startsWith("image/");
   const isManual = receipt.fileContentType === "application/manual";
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
@@ -407,6 +411,7 @@ function ReceiptPreviewModal({ receipt, onClose }: { receipt: ExpenseReceipt; on
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

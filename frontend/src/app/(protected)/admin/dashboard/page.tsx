@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/providers/AuthProvider";
 import api from "@/api/client";
@@ -18,23 +19,45 @@ import { RequestFiltersBar, UserFiltersBar } from "@/components/vacations/Filter
 import { formatDate } from "@/lib/format";
 import type { VacationBalance } from "@/types";
 import AIChatPanel from "@/components/ai/AIChatPanel";
+import PinnedAnnouncements from "@/components/announcements/PinnedAnnouncements";
+import AnnouncementFeed from "@/components/announcements/AnnouncementFeed";
+import CreateAnnouncementModal from "@/components/announcements/CreateAnnouncementModal";
+import AnnouncementStatsModal from "@/components/announcements/AnnouncementStatsModal";
+import PendingApprovalPanel from "@/components/announcements/PendingApprovalPanel";
+import NewAnnouncementPopup from "@/components/announcements/NewAnnouncementPopup";
 import { useToast } from "@/components/ui/Toast";
 import ExportBar from "@/components/reports/ExportBar";
 import { downloadCSV, printAsPDF } from "@/lib/export";
-import { Shield, LogIn, UserPlus, UserMinus, Edit, Key, ClipboardCheck, XCircle, Ban, FileText } from "lucide-react";
+import { Shield, LogIn, UserPlus, UserMinus, Edit, Key, ClipboardCheck, XCircle, Ban, FileText, Users as UsersIcon, Clock, CheckCircle2, TrendingUp, Wallet, Megaphone, Download, RefreshCw, Zap } from "lucide-react";
 
 type ModalAction = "approve" | "reject";
+
+const VALID_TABS = ["users", "requests", "audit", "balances", "announcements"] as const;
+type TabId = (typeof VALID_TABS)[number];
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
   const currentYear = new Date().getFullYear();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const urlTab = searchParams.get("tab");
+  const activeTab: TabId = (VALID_TABS as readonly string[]).includes(urlTab ?? "")
+    ? (urlTab as TabId)
+    : "users";
+  const setActiveTab = (id: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", id);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
 
   // ── Users tab state ──
   const [userRole, setUserRole] = useState("");
   const [userArea, setUserArea] = useState("");
   const [userSearch, setUserSearch] = useState("");
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
 
   // ── Requests tab state ──
   const [reqStatus, setReqStatus] = useState("");
@@ -55,6 +78,8 @@ export default function AdminDashboardPage() {
 
   // ── Export state ──
   const [exporting, setExporting] = useState(false);
+  const [showCreateAnn, setShowCreateAnn] = useState(false);
+  const [annStatsId, setAnnStatsId] = useState<string | null>(null);
 
   // ── Queries ──
   const teamsQ = useQuery({
@@ -105,6 +130,65 @@ export default function AdminDashboardPage() {
     },
   });
 
+  // ── KPI queries ──
+  const kpiUsersQ = useQuery({
+    queryKey: ["admin.kpi.users"],
+    queryFn: async () => {
+      const res = await api.admin.users.list({});
+      return res.items;
+    },
+    staleTime: 60000,
+  });
+
+  const kpiPendingQ = useQuery({
+    queryKey: ["admin.kpi.pending"],
+    queryFn: async () => {
+      const res = await api.admin.requests.list({ status: "PENDING" }, { page: 1, pageSize: 1 });
+      return res.pagination.total;
+    },
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
+
+  const monthStart = `${currentYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}-01`;
+  const monthEnd = new Date(currentYear, new Date().getMonth() + 1, 0).toISOString().slice(0, 10);
+
+  const kpiApprovedMonthQ = useQuery({
+    queryKey: ["admin.kpi.approvedMonth", monthStart, monthEnd],
+    queryFn: async () => {
+      const res = await api.admin.requests.list(
+        { status: "APPROVED", startDate: monthStart, endDate: monthEnd },
+        { page: 1, pageSize: 1 },
+      );
+      return res.pagination.total;
+    },
+    staleTime: 60000,
+  });
+
+  const kpiBalancesQ = useQuery({
+    queryKey: ["admin.kpi.balances", currentYear],
+    queryFn: async () => {
+      const res = await api.admin.balances.list(currentYear);
+      return res.items;
+    },
+    staleTime: 60000,
+  });
+
+  const kpiFinancePendingQ = useQuery({
+    queryKey: ["admin.kpi.financePending"],
+    queryFn: async () => {
+      const res = await api.finance.listReports({ status: "SUBMITTED", page: 1, pageSize: 1 });
+      return res.pagination.total;
+    },
+    staleTime: 60000,
+  });
+
+  const activeUsersCount = (kpiUsersQ.data ?? []).filter((u) => u.isActive !== false).length;
+  const balances = kpiBalancesQ.data ?? [];
+  const totalGranted = balances.reduce((sum, b) => sum + (b.grantedDays || 0) + (b.carriedOverDays || 0), 0);
+  const totalUsed = balances.reduce((sum, b) => sum + (b.usedDays || 0), 0);
+  const utilizationPct = totalGranted > 0 ? Math.round((totalUsed / totalGranted) * 100) : 0;
+
   // ── Mutations ──
   const approveMut = useMutation({
     mutationFn: ({ id, comment }: { id: string; comment?: string }) =>
@@ -131,6 +215,25 @@ export default function AdminDashboardPage() {
     },
     onError: (err) => {
       toast("error", err instanceof Error ? err.message : "Error al rechazar");
+    },
+  });
+
+  const bulkDeactivateMut = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.allSettled(ids.map((id) => api.admin.users.deactivate(id)));
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.length - ok;
+      return { ok, failed };
+    },
+    onSuccess: ({ ok, failed }) => {
+      qc.invalidateQueries({ queryKey: ["admin.users"] });
+      qc.invalidateQueries({ queryKey: ["admin.kpi.users"] });
+      setSelectedUserIds([]);
+      if (failed === 0) {
+        toast("success", `${ok} usuario${ok !== 1 ? "s" : ""} desactivado${ok !== 1 ? "s" : ""} correctamente`);
+      } else {
+        toast("error", `${ok} desactivados, ${failed} fallaron`);
+      }
     },
   });
 
@@ -297,7 +400,53 @@ export default function AdminDashboardPage() {
             onAreaChange={setUserArea}
             onSearchChange={setUserSearch}
           />
-          <Table columns={userColumns} data={usersQ.data ?? []} isLoading={usersQ.isLoading} isError={usersQ.isError} errorMessage="Error al cargar usuarios." onRetry={() => void usersQ.refetch()} emptyMessage="No se encontraron usuarios." />
+          {selectedUserIds.length > 0 && (
+            <div className="flex items-center justify-between gap-3 px-4 py-3 bg-seekop-50 border border-seekop-200 rounded-xl">
+              <p className="text-sm text-seekop-700">
+                <strong>{selectedUserIds.length}</strong> usuario{selectedUserIds.length !== 1 ? "s" : ""} seleccionado{selectedUserIds.length !== 1 ? "s" : ""}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setSelectedUserIds([])}
+                >
+                  Limpiar
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  loading={bulkDeactivateMut.isPending}
+                  onClick={() => {
+                    if (confirm(`¿Desactivar ${selectedUserIds.length} usuario${selectedUserIds.length !== 1 ? "s" : ""}?`)) {
+                      bulkDeactivateMut.mutate(selectedUserIds);
+                    }
+                  }}
+                >
+                  Desactivar seleccionados
+                </Button>
+              </div>
+            </div>
+          )}
+          <Table
+            columns={userColumns}
+            data={usersQ.data ?? []}
+            isLoading={usersQ.isLoading}
+            isError={usersQ.isError}
+            errorMessage="Error al cargar usuarios."
+            onRetry={() => void usersQ.refetch()}
+            emptyMessage="No se encontraron usuarios."
+            selection={{
+              selectedIds: selectedUserIds,
+              getRowId: (row: (typeof usersQ.data extends (infer U)[] | undefined ? U : never)) => row.id,
+              onToggle: (id) =>
+                setSelectedUserIds((prev) =>
+                  prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                ),
+              onToggleAll: (allIds) =>
+                setSelectedUserIds((prev) => (prev.length === allIds.length ? [] : allIds)),
+            }}
+          />
         </div>
       ),
     },
@@ -395,11 +544,31 @@ export default function AdminDashboardPage() {
         </div>
       ),
     },
+    {
+      id: "announcements",
+      label: "Anuncios",
+      content: (
+        <div className="space-y-6">
+          <PendingApprovalPanel />
+          <AnnouncementFeed
+            canCreate
+            canPin
+            canDelete
+            canViewStats
+            onCreateClick={() => setShowCreateAnn(true)}
+            onStatsClick={(id) => setAnnStatsId(id)}
+          />
+        </div>
+      ),
+    },
   ];
 
   return (
     <RoleGuard allowed={["ADMIN"]}>
       <div className="space-y-6">
+        <PinnedAnnouncements />
+        <NewAnnouncementPopup />
+
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Panel de Administración</h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -407,7 +576,86 @@ export default function AdminDashboardPage() {
           </p>
         </div>
 
-        <Tabs tabs={tabs} defaultTab="users" />
+        {/* KPI cards */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <KPICard
+            icon={UsersIcon}
+            label="Usuarios activos"
+            value={kpiUsersQ.isLoading ? "…" : activeUsersCount}
+            tint="blue"
+            onClick={() => setActiveTab("users")}
+          />
+          <KPICard
+            icon={Clock}
+            label="Pendientes globales"
+            value={kpiPendingQ.isLoading ? "…" : (kpiPendingQ.data ?? 0)}
+            tint="amber"
+            onClick={() => setActiveTab("requests")}
+          />
+          <KPICard
+            icon={CheckCircle2}
+            label="Aprobadas (mes)"
+            value={kpiApprovedMonthQ.isLoading ? "…" : (kpiApprovedMonthQ.data ?? 0)}
+            tint="emerald"
+            onClick={() => setActiveTab("requests")}
+          />
+          <KPICard
+            icon={TrendingUp}
+            label={`Utilización ${currentYear}`}
+            value={kpiBalancesQ.isLoading ? "…" : `${utilizationPct}%`}
+            tint="violet"
+            onClick={() => setActiveTab("balances")}
+          />
+          <KPICard
+            icon={Wallet}
+            label="Gastos por revisar"
+            value={kpiFinancePendingQ.isLoading ? "…" : (kpiFinancePendingQ.data ?? 0)}
+            tint="rose"
+          />
+        </div>
+
+        {/* Quick actions */}
+        <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap size={16} className="text-[#9ab236]" />
+            <h3 className="text-sm font-semibold text-slate-700">Acciones rápidas</h3>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+            <QuickAction
+              icon={UserPlus}
+              label="Gestionar usuarios"
+              onClick={() => setActiveTab("users")}
+            />
+            <QuickAction
+              icon={Megaphone}
+              label="Crear anuncio"
+              onClick={() => setShowCreateAnn(true)}
+            />
+            <QuickAction
+              icon={RefreshCw}
+              label={`Rollover ${currentYear}→${currentYear + 1}`}
+              onClick={() => {
+                if (confirm(`¿Ejecutar rollover de balances ${currentYear} → ${currentYear + 1}?`)) {
+                  rolloverMut.mutate();
+                }
+              }}
+              loading={rolloverMut.isPending}
+            />
+            <QuickAction
+              icon={Download}
+              label="Exportar solicitudes"
+              onClick={handleExportRequestsCSV}
+              loading={exporting}
+            />
+            <QuickAction
+              icon={Shield}
+              label="Ver auditoría"
+              onClick={() => setActiveTab("audit")}
+            />
+          </div>
+        </div>
+
+        <Tabs tabs={tabs} activeId={activeTab} onChange={setActiveTab} />
 
         <AIChatPanel title="Asistente IA (Admin)" />
 
@@ -418,8 +666,78 @@ export default function AdminDashboardPage() {
           action={modalAction}
           onConfirm={handleConfirm}
         />
+
+        <CreateAnnouncementModal open={showCreateAnn} onClose={() => setShowCreateAnn(false)} />
+        <AnnouncementStatsModal announcementId={annStatsId} onClose={() => setAnnStatsId(null)} />
       </div>
     </RoleGuard>
+  );
+}
+
+// ── KPI card ──
+type Tint = "blue" | "amber" | "emerald" | "violet" | "rose";
+const TINT_STYLES: Record<Tint, { iconBg: string; iconText: string; ring: string }> = {
+  blue:    { iconBg: "bg-blue-50",    iconText: "text-blue-600",    ring: "hover:ring-blue-200" },
+  amber:   { iconBg: "bg-amber-50",   iconText: "text-amber-600",   ring: "hover:ring-amber-200" },
+  emerald: { iconBg: "bg-emerald-50", iconText: "text-emerald-600", ring: "hover:ring-emerald-200" },
+  violet:  { iconBg: "bg-violet-50",  iconText: "text-violet-600",  ring: "hover:ring-violet-200" },
+  rose:    { iconBg: "bg-rose-50",    iconText: "text-rose-600",    ring: "hover:ring-rose-200" },
+};
+
+function KPICard({
+  icon: Icon,
+  label,
+  value,
+  tint,
+  onClick,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+  tint: Tint;
+  onClick?: () => void;
+}) {
+  const styles = TINT_STYLES[tint];
+  const Component = onClick ? "button" : "div";
+  return (
+    <Component
+      onClick={onClick}
+      className={`text-left w-full p-4 rounded-xl border border-slate-200 bg-white ring-0 transition-all ${onClick ? `hover:shadow-sm cursor-pointer hover:ring-2 ${styles.ring}` : ""}`}
+    >
+      <div className="flex items-center gap-3">
+        <div className={`flex items-center justify-center w-9 h-9 rounded-lg ${styles.iconBg} ${styles.iconText} shrink-0`}>
+          <Icon size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-slate-500 truncate">{label}</p>
+          <p className="text-xl font-bold text-slate-900 leading-tight">{value}</p>
+        </div>
+      </div>
+    </Component>
+  );
+}
+
+// ── Quick action button ──
+function QuickAction({
+  icon: Icon,
+  label,
+  onClick,
+  loading,
+}: {
+  icon: React.ElementType;
+  label: string;
+  onClick: () => void;
+  loading?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      className="flex items-center gap-2 px-3 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 font-medium hover:border-seekop-300 hover:bg-seekop-50/40 hover:text-seekop-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      <Icon size={16} className={loading ? "animate-spin text-seekop-500" : "text-slate-500"} />
+      <span className="truncate">{label}</span>
+    </button>
   );
 }
 

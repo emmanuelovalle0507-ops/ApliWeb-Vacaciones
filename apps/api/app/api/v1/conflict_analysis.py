@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -25,18 +27,26 @@ def analyze_request_conflict(
 
 @router.get("/suggest-dates")
 def suggest_optimal_dates(
-    desired_days: int = Query(..., ge=1, le=30),
-    search_months: int = Query(default=3, ge=1, le=6),
+    desired_days: int = Query(..., ge=1, le=30, description="Business days requested"),
+    search_months: int = Query(default=3, ge=1, le=6, description="Months to scan ahead"),
+    prefer_bridges: bool = Query(default=False, description="Boost windows adjacent to weekends/holidays"),
+    earliest_start_date: date | None = Query(
+        default=None, description="User-imposed earliest start (YYYY-MM-DD). Must be >= policy earliest."
+    ),
+    flexible_days: int = Query(default=0, ge=0, le=2, description="Also consider desired_days ± N"),
     db: Session = Depends(get_db),
     current_user: UserSummary = Depends(require_roles("EMPLOYEE", "MANAGER")),
 ):
-    """Suggest optimal date ranges with least team conflicts."""
+    """Suggest optimal date ranges, scored and optionally enriched with AI explanations."""
     service = ConflictAnalysisService(db)
     try:
         return service.suggest_optimal_dates(
             employee_id=current_user.id,
             desired_days=desired_days,
             search_months=search_months,
+            prefer_bridges=prefer_bridges,
+            earliest_start_date=earliest_start_date,
+            flexible_days=flexible_days,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

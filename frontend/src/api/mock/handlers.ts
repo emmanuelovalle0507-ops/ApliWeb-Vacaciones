@@ -20,6 +20,9 @@ import type {
   UserCreatePayload,
   UserUpdatePayload,
   AuditLogEntry,
+  Announcement,
+  AnnouncementCreatePayload,
+  AnnouncementReadStats,
 } from "@/types";
 import { businessDaysBetween } from "@/lib/dates";
 import type { ExpenseReceipt, ExpenseReport } from "@/api/real/client";
@@ -844,7 +847,7 @@ export async function analyzeConflict(_requestId: string): Promise<import("@/typ
   };
 }
 
-export async function suggestDates(_desiredDays: number, _searchMonths?: number): Promise<import("@/types").DateSuggestionsResponse> {
+export async function suggestDates(_params: import("@/types").SuggestDatesParams): Promise<import("@/types").DateSuggestionsResponse> {
   await delay(300);
   return {
     policy_info: {
@@ -852,6 +855,12 @@ export async function suggestDates(_desiredDays: number, _searchMonths?: number)
       max_people_off_per_day: 2,
       team_size: 5,
       earliest_allowed_date: "2026-04-10",
+      search_horizon_days: 90,
+    },
+    balance_info: {
+      available_days: 12,
+      requested_days: _params.desiredDays,
+      flexible_days: _params.flexibleDays ?? 0,
     },
     suggestions: [],
     ai_powered: false,
@@ -918,4 +927,189 @@ export async function importEmployees(_file: File): Promise<import("@/api/real/c
 export async function rollbackImport(_batchId: string): Promise<import("@/api/real/client").BulkRollbackResponse> {
   await delay(300);
   return { rolled_back: 2, emails: ["juanp@seekop.com", "marial@seekop.com"], detail: "Se desactivaron 2 usuario(s) del lote mock…" };
+}
+
+// ── Announcements ──────────────────────────────────────
+
+const mockAnnouncements: Announcement[] = [
+  {
+    id: "ann-1", authorId: "u1", authorName: "Admin", type: "NEW_EMPLOYEE",
+    title: "Nuevo integrante en Desarrollo", body: "Se incorpora Juan Pérez como Desarrollador al equipo Desarrollo. ¡Bienvenido!",
+    isPinned: false, isBroadcast: false, teamIds: ["t1"], teamNames: ["Desarrollo"],
+    expiresAt: null, publishAt: null, requiresAcknowledgment: false, isAcknowledged: false, isArchived: false, status: "PUBLISHED",
+    attachmentUrl: null, attachmentName: null, imageUrl: null, isRead: false, readCount: 3, commentCount: 0, reactions: [], myReactions: [],
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  },
+  {
+    id: "ann-2", authorId: "u1", authorName: "Admin", type: "URGENT",
+    title: "Mantenimiento del sistema", body: "El sistema estará en mantenimiento el sábado 20 de 8pm a 11pm.",
+    isPinned: true, isBroadcast: true, teamIds: [], teamNames: [],
+    expiresAt: null, publishAt: null, requiresAcknowledgment: false, isAcknowledged: false, isArchived: false, status: "PUBLISHED",
+    attachmentUrl: null, attachmentName: null, imageUrl: null, isRead: false, readCount: 5, commentCount: 2, reactions: [{emoji: "👍", count: 3, userNames: ["Juan", "María", "Pedro"]}], myReactions: [],
+    createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+  },
+];
+
+export async function listMyAnnouncements(_type?: string, _pagination?: PaginationParams): Promise<PaginatedResponse<Announcement> & { unreadCount: number }> {
+  await delay(200);
+  return { items: mockAnnouncements, unreadCount: 2, pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 } };
+}
+
+export async function getUnreadAnnouncementCount(): Promise<number> {
+  await delay(100);
+  return 2;
+}
+
+export async function markAnnouncementRead(_id: string): Promise<void> {
+  await delay(100);
+}
+
+export async function createAnnouncement(_payload: AnnouncementCreatePayload): Promise<Announcement> {
+  await delay(300);
+  return { ...mockAnnouncements[0], id: `ann-${Date.now()}`, type: _payload.type, title: _payload.title, body: _payload.body };
+}
+
+export async function dismissAnnouncement(_id: string): Promise<void> {
+  await delay(150);
+}
+
+export async function undismissAnnouncement(_id: string): Promise<void> {
+  await delay(150);
+}
+
+export async function deleteAnnouncement(_id: string): Promise<void> {
+  await delay(200);
+}
+
+export async function toggleAnnouncementPin(_id: string): Promise<Announcement> {
+  await delay(200);
+  return { ...mockAnnouncements[0], isPinned: true };
+}
+
+export async function getAnnouncementStats(_id: string): Promise<AnnouncementReadStats> {
+  await delay(200);
+  return {
+    announcementId: _id, totalTargetUsers: 5, readCount: 3,
+    readUsers: [
+      { userId: "u1", fullName: "Juan Pérez", readAt: new Date().toISOString() },
+    ],
+    unreadUsers: [
+      { userId: "u2", fullName: "María López", readAt: null },
+    ],
+  };
+}
+
+export async function toggleAnnouncementReaction(_id: string, _emoji: string): Promise<{ reactions: import("@/types").ReactionSummary[] }> {
+  await delay(150);
+  return { reactions: [{ emoji: _emoji, count: 1, userNames: ["You"] }] };
+}
+
+export async function listAnnouncementComments(_id: string): Promise<import("@/types").AnnouncementComment[]> {
+  await delay(150);
+  return [];
+}
+
+export async function addAnnouncementComment(_id: string, body: string): Promise<import("@/types").AnnouncementComment> {
+  await delay(200);
+  return { id: `c-${Date.now()}`, announcementId: _id, userId: "u1", userName: "You", body, createdAt: new Date().toISOString() };
+}
+
+export async function deleteAnnouncementComment(_id: string): Promise<void> {
+  await delay(150);
+}
+
+export async function acknowledgeAnnouncement(_id: string): Promise<void> {
+  await delay(150);
+}
+
+export async function archiveAnnouncement(_id: string): Promise<Announcement> {
+  await delay(200);
+  return { ...mockAnnouncements[0], isArchived: true, status: "ARCHIVED" };
+}
+
+export async function unarchiveAnnouncement(_id: string): Promise<Announcement> {
+  await delay(200);
+  return { ...mockAnnouncements[0], isArchived: false, status: "PUBLISHED" };
+}
+
+export async function listPendingApprovalAnnouncements(): Promise<Announcement[]> {
+  await delay(200);
+  return [];
+}
+
+export async function approveAnnouncement(_id: string): Promise<Announcement> {
+  await delay(200);
+  return { ...mockAnnouncements[0], status: "PUBLISHED" };
+}
+
+export async function rejectAnnouncement(_id: string): Promise<void> {
+  await delay(200);
+}
+
+export async function searchAnnouncements(_q: string): Promise<Announcement[]> {
+  await delay(200);
+  return mockAnnouncements;
+}
+
+export async function listNewSinceAnnouncements(_since: string): Promise<Announcement[]> {
+  await delay(200);
+  return mockAnnouncements.filter(a => !a.isRead);
+}
+
+export async function uploadAnnouncementImage(_file: File): Promise<{ url: string; fileName: string }> {
+  await delay(300);
+  return { url: "/mock/image.jpg", fileName: "mock.jpg" };
+}
+
+export async function listPinnedAnnouncements(): Promise<Announcement[]> {
+  await delay(100);
+  return mockAnnouncements.filter(a => a.isPinned);
+}
+
+// ── Admin insights (mock) ──────────────────────────────────────────
+export async function getAdminStats() {
+  await delay(100);
+  return {
+    active_users: 42,
+    total_users: 48,
+    pending_requests: 5,
+    approved_this_month: 12,
+    utilization_pct: 38,
+    total_granted_days: 960,
+    total_used_days: 365,
+    finance_pending: 3,
+    new_hires_month: 2,
+    year: new Date().getFullYear(),
+  };
+}
+
+export async function getAdminHealth() {
+  await delay(100);
+  return {
+    overall: "healthy" as const,
+    env: "mock",
+    checked_at: new Date().toISOString(),
+    components: [
+      { name: "Database", status: "healthy" as const, detail: "42 usuarios, 120 audit entries" },
+      { name: "OpenAI (LLM)", status: "disabled" as const, detail: "No configurado" },
+      { name: "Jira", status: "disabled" as const, detail: "No configurado" },
+      { name: "Email (SMTP)", status: "healthy" as const, detail: "smtp.gmail.com:587" },
+      { name: "Logins fallidos (24h)", status: "healthy" as const, detail: "2 intentos en las últimas 24h" },
+    ],
+  };
+}
+
+export async function getAdminActivityFeed(limit = 20) {
+  await delay(100);
+  const now = Date.now();
+  const items = Array.from({ length: Math.min(limit, 8) }, (_, i) => ({
+    id: i + 1,
+    action: ["LOGIN_SUCCESS", "REQUEST_CREATED", "REQUEST_APPROVED", "USER_CREATED"][i % 4],
+    entity_type: "user",
+    entity_id: `mock-${i}`,
+    actor_name: ["Ana García", "Carlos Ruiz", "María López", "Juan Pérez"][i % 4],
+    metadata: {},
+    created_at: new Date(now - i * 600_000).toISOString(),
+  }));
+  return { items };
 }

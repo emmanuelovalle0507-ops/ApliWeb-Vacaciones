@@ -11,10 +11,19 @@ interface Tab {
 interface TabsProps {
   tabs: Tab[];
   defaultTab?: string;
+  activeId?: string;
+  onChange?: (id: string) => void;
 }
 
-export default function Tabs({ tabs, defaultTab }: TabsProps) {
-  const [active, setActive] = useState(defaultTab || tabs[0]?.id || "");
+export default function Tabs({ tabs, defaultTab, activeId, onChange }: TabsProps) {
+  const [internalActive, setInternalActive] = useState(defaultTab || tabs[0]?.id || "");
+  const isControlled = activeId !== undefined;
+  const active = isControlled ? activeId : internalActive;
+
+  const handleSelect = (id: string) => {
+    if (!isControlled) setInternalActive(id);
+    onChange?.(id);
+  };
 
   return (
     <div>
@@ -25,7 +34,7 @@ export default function Tabs({ tabs, defaultTab }: TabsProps) {
               key={tab.id}
               role="tab"
               aria-selected={active === tab.id}
-              onClick={() => setActive(tab.id)}
+              onClick={() => handleSelect(tab.id)}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 active === tab.id
                   ? "border-[#9ab236] text-seekop-600"

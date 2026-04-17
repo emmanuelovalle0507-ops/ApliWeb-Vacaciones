@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import RoleGuard from "@/components/layout/RoleGuard";
 import {
@@ -502,9 +503,12 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ExpenseReceipt; onC
   const isPdf = !isManual && receipt.fileContentType === "application/pdf";
   const confidence = receipt.extractionConfidence;
   const canEdit = receipt.extractionStatus === "DONE" || receipt.extractionStatus === "FAILED" || isManual;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
@@ -651,7 +655,8 @@ function ReceiptDetailModal({ receipt, onClose }: { receipt: ExpenseReceipt; onC
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

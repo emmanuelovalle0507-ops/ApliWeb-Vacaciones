@@ -1,7 +1,9 @@
 from fastapi import APIRouter
 
 from app.api.v1.admin import router as admin_router
+from app.api.v1.admin_insights import router as admin_insights_router
 from app.api.v1.ai_chat import router as ai_chat_router
+from app.api.v1.announcements import router as announcements_router
 from app.api.v1.conflict_analysis import router as conflict_analysis_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.calendar import router as calendar_router
@@ -24,7 +26,9 @@ api_router.include_router(notifications_router)
 api_router.include_router(team_policies_router)
 api_router.include_router(calendar_router)
 api_router.include_router(admin_router)
+api_router.include_router(admin_insights_router)
 api_router.include_router(conflict_analysis_router)
 api_router.include_router(expenses_router)
 api_router.include_router(finance_router)
 api_router.include_router(jira_router)
+api_router.include_router(announcements_router)

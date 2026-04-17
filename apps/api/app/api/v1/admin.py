@@ -15,6 +15,7 @@ from app.repositories.vacation_balance_repo import VacationBalanceRepository
 from app.repositories.vacation_request_repo import VacationRequestRepository
 from app.core.security import hash_password
 from app.models.user import User, UserRole
+from app.services.announcement_service import AnnouncementService
 from app.services.email_service import send_welcome_email
 from app.schemas.admin import (
     AdminUserCreateIn,
@@ -176,6 +177,14 @@ def create_user(
         full_name=payload.full_name,
         temp_password=payload.password,
     )
+
+    # Auto-create welcome announcement for the team
+    try:
+        ann_service = AnnouncementService(db)
+        ann_service.create_welcome_announcement(user, created_by_id=current_user.id)
+        db.commit()
+    except Exception:
+        pass  # Non-critical — don't fail user creation if announcement fails
 
     out = _user_to_out(user, repo, team_repo)
     return UserCreateOut(**out.model_dump(), email_sent=email_sent)

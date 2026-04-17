@@ -1,16 +1,16 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Pencil, UserX, Trash2, AlertTriangle, Users, FileText, BarChart3, ShieldAlert, KeyRound, Briefcase, Building2, Upload } from "lucide-react";
+import { UserPlus, Pencil, UserX, Trash2, AlertTriangle, Users, FileText, ShieldAlert, KeyRound, Briefcase, Building2 } from "lucide-react";
 import api from "@/api/client";
-import type { User, UserRole, RequestStatus, VacationBalance, UserCreatePayload, UserUpdatePayload } from "@/types";
+import type { User, UserRole, RequestStatus, UserCreatePayload, UserUpdatePayload } from "@/types";
 import RoleGuard from "@/components/layout/RoleGuard";
 import Tabs from "@/components/ui/Tabs";
 import Table, { type Column } from "@/components/ui/Table";
 import Button from "@/components/ui/Button";
 import { RoleBadge } from "@/components/ui/Badge";
-import Select from "@/components/ui/Select";
 import RequestsTable from "@/components/vacations/RequestsTable";
 import { RequestFiltersBar, UserFiltersBar } from "@/components/vacations/Filters";
 import AIChatPanel from "@/components/ai/AIChatPanel";
@@ -20,6 +20,12 @@ import { downloadCSV, printAsPDF } from "@/lib/export";
 import UserFormModal from "@/components/users/UserFormModal";
 import UserCreatedModal from "@/components/users/UserCreatedModal";
 import BulkImportPanel from "@/components/hr/BulkImportPanel";
+import PinnedAnnouncements from "@/components/announcements/PinnedAnnouncements";
+import AnnouncementFeed from "@/components/announcements/AnnouncementFeed";
+import CreateAnnouncementModal from "@/components/announcements/CreateAnnouncementModal";
+import AnnouncementStatsModal from "@/components/announcements/AnnouncementStatsModal";
+import PendingApprovalPanel from "@/components/announcements/PendingApprovalPanel";
+import NewAnnouncementPopup from "@/components/announcements/NewAnnouncementPopup";
 import { useAuth } from "@/providers/AuthProvider";
 
 /* ── Helpers ── */
@@ -44,6 +50,8 @@ export default function HRDashboardPage() {
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
   const isHR = currentUser?.role === "HR";
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   // ── Users tab state ──
   const [userRole, setUserRole] = useState("");
@@ -58,9 +66,6 @@ export default function HRDashboardPage() {
   const [reqStart, setReqStart] = useState("");
   const [reqEnd, setReqEnd] = useState("");
 
-  // ── Balances tab state ──
-  const [balYear, setBalYear] = useState(currentYear);
-
   // ── Export state ──
   const [exporting, setExporting] = useState(false);
 
@@ -70,6 +75,8 @@ export default function HRDashboardPage() {
   const [deactivateTarget, setDeactivateTarget] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [showCreateAnn, setShowCreateAnn] = useState(false);
+  const [annStatsId, setAnnStatsId] = useState<string | null>(null);
   const [createdCreds, setCreatedCreds] = useState<{
     name: string; email: string; password: string; emailSent: boolean;
   } | null>(null);
@@ -121,14 +128,6 @@ export default function HRDashboardPage() {
     },
   });
 
-  const balancesQ = useQuery({
-    queryKey: ["admin.balances", balYear],
-    queryFn: async () => {
-      const res = await api.admin.balances.list(balYear);
-      return res.items;
-    },
-  });
-
   // ── Export handlers ──
   const handleExportRequestsCSV = async () => {
     setExporting(true);
@@ -140,18 +139,6 @@ export default function HRDashboardPage() {
       downloadCSV(csv, `solicitudes_${reqStart || currentYear}.csv`);
     } catch {
       toast("error", "Error al exportar solicitudes");
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleExportBalancesCSV = async () => {
-    setExporting(true);
-    try {
-      const csv = await api.reports.exportBalances(balYear);
-      downloadCSV(csv, `balances_${balYear}.csv`);
-    } catch {
-      toast("error", "Error al exportar balances");
     } finally {
       setExporting(false);
     }
@@ -317,21 +304,6 @@ export default function HRDashboardPage() {
       },
     },
   ];
-
-  type BalanceRow = VacationBalance & { userName: string; userArea: string };
-  const balanceColumns: Column<BalanceRow>[] = [
-    { key: "userName", header: "Empleado" },
-    { key: "userArea", header: "Área" },
-    { key: "grantedDays", header: "Otorgados" },
-    { key: "carriedOverDays", header: "Arrastrados" },
-    { key: "usedDays", header: "Usados" },
-    { key: "availableDays", header: "Disponibles" },
-  ];
-
-  const yearOptions = Array.from({ length: 3 }, (_, i) => {
-    const y = currentYear - i;
-    return { value: String(y), label: String(y) };
-  });
 
   const activeCount = (usersQ.data ?? []).filter((u) => u.isActive !== false).length;
   const totalCount = (usersQ.data ?? []).length;
@@ -513,30 +485,6 @@ export default function HRDashboardPage() {
       ),
     },
     {
-      id: "balances",
-      label: "Balances",
-      content: (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
-            <div className="w-40">
-              <Select
-                label="Año"
-                value={String(balYear)}
-                onChange={(e) => setBalYear(Number(e.target.value))}
-                options={yearOptions}
-              />
-            </div>
-            <ExportBar
-              onExportCSV={handleExportBalancesCSV}
-              onPrintPDF={printAsPDF}
-              loading={exporting}
-            />
-          </div>
-          <Table columns={balanceColumns} data={(balancesQ.data ?? []) as BalanceRow[]} isLoading={balancesQ.isLoading} isError={balancesQ.isError} errorMessage="Error al cargar balances." onRetry={() => void balancesQ.refetch()} emptyMessage="No hay balances para este año." />
-        </div>
-      ),
-    },
-    {
       id: "import",
       label: "Importación Masiva",
       content: (
@@ -548,17 +496,38 @@ export default function HRDashboardPage() {
         />
       ),
     },
+    {
+      id: "announcements",
+      label: "Anuncios",
+      content: (
+        <div className="space-y-6">
+          <PendingApprovalPanel />
+          <AnnouncementFeed
+            canCreate
+            canPin
+            canDelete
+            canViewStats
+            onCreateClick={() => setShowCreateAnn(true)}
+            onStatsClick={(id) => setAnnStatsId(id)}
+          />
+        </div>
+      ),
+    },
   ];
 
   return (
     <RoleGuard allowed={["HR"]}>
       <div className="space-y-6">
+        {/* Pinned Announcements */}
+        <PinnedAnnouncements />
+        <NewAnnouncementPopup />
+
         {/* Header */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Recursos Humanos</h1>
             <p className="text-sm text-gray-400 mt-0.5">
-              Gestión de empleados, solicitudes y balances de vacaciones
+              Gestión de empleados, solicitudes y anuncios
             </p>
           </div>
         </div>
@@ -639,6 +608,10 @@ export default function HRDashboardPage() {
 
         <Tabs tabs={tabs} defaultTab="users" />
 
+        {/* Announcement modals */}
+        <CreateAnnouncementModal open={showCreateAnn} onClose={() => setShowCreateAnn(false)} />
+        <AnnouncementStatsModal announcementId={annStatsId} onClose={() => setAnnStatsId(null)} />
+
         {/* Create User Modal */}
         <UserFormModal
           open={showCreateModal}
@@ -667,8 +640,8 @@ export default function HRDashboardPage() {
         />
 
         {/* Deactivate Confirmation */}
-        {deactivateTarget && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        {mounted && deactivateTarget && createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
               <div className="px-6 pt-6 pb-4 text-center">
                 <div className="mx-auto flex items-center justify-center w-14 h-14 rounded-full bg-red-50 mb-4">
@@ -702,12 +675,13 @@ export default function HRDashboardPage() {
                 </Button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Delete Permanently Confirmation */}
-        {deleteTarget && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        {mounted && deleteTarget && createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
               <div className="px-6 pt-6 pb-4">
                 <div className="mx-auto flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
@@ -757,7 +731,8 @@ export default function HRDashboardPage() {
                 </Button>
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* User Created Success Modal */}

@@ -16,6 +16,11 @@ import TeamPolicyAgentPanel from "@/components/ai/TeamPolicyAgentPanel";
 import AIChatPanel from "@/components/ai/AIChatPanel";
 import VacationCalendar from "@/components/calendar/VacationCalendar";
 import RequestDetailModal from "@/components/vacations/RequestDetailModal";
+import PinnedAnnouncements from "@/components/announcements/PinnedAnnouncements";
+import AnnouncementFeed from "@/components/announcements/AnnouncementFeed";
+import NewAnnouncementPopup from "@/components/announcements/NewAnnouncementPopup";
+import CreateAnnouncementModal from "@/components/announcements/CreateAnnouncementModal";
+import AnnouncementStatsModal from "@/components/announcements/AnnouncementStatsModal";
 import { useToast } from "@/components/ui/Toast";
 
 type ModalAction = "approve" | "reject";
@@ -28,6 +33,8 @@ export default function ManagerDashboardPage() {
   const { toast } = useToast();
   const [selectedReq, setSelectedReq] = useState<VacationRequest | null>(null);
   const [modalAction, setModalAction] = useState<ModalAction>("approve");
+  const [showCreateAnn, setShowCreateAnn] = useState(false);
+  const [annStatsId, setAnnStatsId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [viewTarget, setViewTarget] = useState<VacationRequest | null>(null);
 
@@ -211,6 +218,20 @@ export default function ManagerDashboardPage() {
       content: <VacationCalendar title="Calendario del Equipo" />,
     },
     {
+      id: "announcements",
+      label: "Anuncios",
+      content: (
+        <AnnouncementFeed
+          canCreate
+          canPin
+          canDelete
+          canViewStats
+          onCreateClick={() => setShowCreateAnn(true)}
+          onStatsClick={(id) => setAnnStatsId(id)}
+        />
+      ),
+    },
+    {
       id: "ai",
       label: "Asistente IA",
       content: <AIChatPanel title="Asistente IA (Manager)" />,
@@ -220,6 +241,10 @@ export default function ManagerDashboardPage() {
   return (
     <RoleGuard allowed={["MANAGER"]}>
       <div className="space-y-6">
+        {/* Pinned Announcements */}
+        <PinnedAnnouncements />
+        <NewAnnouncementPopup />
+
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard de Manager</h1>
           <p className="text-sm text-gray-500 mt-1">Gestiona las solicitudes y políticas de tu equipo</p>
@@ -288,6 +313,10 @@ export default function ManagerDashboardPage() {
 
         {/* Tabs: Solicitudes | Políticas | IA */}
         <Tabs tabs={tabs} defaultTab="requests" />
+
+        {/* Announcement modals */}
+        <CreateAnnouncementModal open={showCreateAnn} onClose={() => setShowCreateAnn(false)} />
+        <AnnouncementStatsModal announcementId={annStatsId} onClose={() => setAnnStatsId(null)} />
 
         {/* Detail modal for history */}
         <RequestDetailModal
